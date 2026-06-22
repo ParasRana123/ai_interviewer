@@ -90,6 +90,39 @@ Return JSON in EXACTLY this schema:
   }
 }
 
+STRICT SCHEMA REQUIREMENTS:
+
+- codingProfiles MUST always be an object.
+- Never return codingProfiles as an array.
+- Never return codingProfiles as a string.
+- If a platform is missing, return an empty object with null/empty values.
+
+Example:
+
+"codingProfiles": {
+  "leetcode": {
+    "profileUrl": null,
+    "rating": null,
+    "rank": null,
+    "solvedProblems": null
+  },
+  "codeforces": {
+    "profileUrl": null,
+    "rating": null,
+    "rank": null,
+    "maxRating": null
+  },
+  "codechef": {
+    "profileUrl": null,
+    "rating": null,
+    "stars": null
+  },
+  "hackerrank": {
+    "profileUrl": null,
+    "badges": []
+  }
+}
+
 Additional extraction requirements:
 
 - Extract LinkedIn URL instead of the word "LinkedIn".
