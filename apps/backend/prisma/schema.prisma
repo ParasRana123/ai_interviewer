@@ -3,6 +3,9 @@
 
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
+// **** IMPORTANT *********:->
+// Use this command to apply migrations: bun --bun run prisma migrate dev
+
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -10,4 +13,42 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+model Interview {
+  id             String @id @default(uuid())
+  name           String?
+  email          String? @unique
+  phone          String?
+  education      Json?
+  experience     Json?
+  projects       Json?
+  skills         Json?
+  achievements   Json?
+  codingProfiles Json?
+  status         InterviewStatus @default(PRE)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  conversations  Message[]
+  score          Int          @default(0)
+}
+
+enum InterviewStatus {
+  PRE
+  INPROGRESS
+  DONE
+}
+
+model Message {
+  id           String     @id       @default(uuid())
+  message      String
+  type         MessageRole
+  interviewId  String
+  interview    Interview     @relation(fields: [interviewId] , references: [id])
+  createdAt    DateTime      @default(now())
+}
+
+enum  MessageRole {
+  USER
+  ASSISTANT
 }

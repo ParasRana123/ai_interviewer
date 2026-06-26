@@ -6,6 +6,7 @@ import { extractProfiles } from "../utils/urlExtractor";
 import { getGithuStats } from "../services/github.service";
 import { getLeetcodeStats } from "../services/leecode.service";
 import { getCodeforcesStats } from "../services/codeforces.service";
+import { prisma } from "../prisma/db";
 
 const router = express.Router();
 const upload = multer();
@@ -49,10 +50,34 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
           );
         }
       }
+
+      const interview = await prisma.interview.create({
+        data: {
+          name: enrichedResume.name,
+          email: enrichedResume.email,
+          phone: enrichedResume.phone,
+          education: enrichedResume.education,
+          experience: enrichedResume.experience,
+          projects: enrichedResume.projects,
+          skills: enrichedResume.skills,
+          achievements: enrichedResume.achievements,
+          codingProfiles: {
+            ...enrichedResume.codingProfiles,
+            githubStats: enrichedResume.githubStats,
+            leetcodeStats: enrichedResume.leetcodeStats,
+            codeforcesStats: enrichedResume.codeforcesStats
+          },
+          status: "PRE",
+          score: 0,
+        }
+      })
+
       return res.status(200).json({
         success: true,
+        interviewId: interview.id,
         data: enrichedResume,
       });
+      
     } catch (error: any) {
       console.error(
         "Resume Parsing Error:",
