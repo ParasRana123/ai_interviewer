@@ -25,7 +25,7 @@ export function Form() {
       formData.append("resume", resume);
 
       const { data } = await axios.post(
-        `${BACKEND_URL}/api/upload-resume`,
+        `${BACKEND_URL}/api/v1/upload-resume`,
         formData
       );
 
