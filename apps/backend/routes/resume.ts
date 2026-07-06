@@ -137,4 +137,36 @@ router.post("/session1/:interviewId" , async (req , res) => {
   res.json({ message: "Message saved" });
 })
 
+router.get("/result/:interviewId" , async (req , res) => {
+  const interview = await prisma.interview.findFirst({
+    where: {
+      id: req.params.interviewId
+    },
+    include: {
+      conversations: true
+    }
+  })
+
+  if(!interview) {
+    res.status(411).json({
+      message: "Interview not found"
+    })
+    return
+  }
+
+  if(interview.status == "INPROGRESS") {
+    
+  }
+
+  res.json({
+    score: interview?.score,
+    feedback: interview?.feedback,
+    transcript: interview?.conversations.map(c => ({
+      type: c.type,
+      content: c.message,
+      createdAt: c.createdAt
+    }))
+  })
+})
+
 export default router;
