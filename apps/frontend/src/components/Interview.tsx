@@ -15,8 +15,29 @@ export function Interview() {
             const ms = await navigator.mediaDevices.getUserMedia({
                 audio: true,
             });
+
+            const socket = new WebSocket('wss://api.deepgram.com/v1/listen' , [
+                'token',
+                process.env.DEEPGRAM_API_KEY!
+            ]);
+
+            socket.onopen = () => {
+                const mediaRecorder = new MediaRecorder(ms , { mimeType: "audio/webm" });
+                mediaRecorder.start(250);
+                mediaRecorder.addEventListener("dataavailable" , (e) => {
+                    socket.send(e.data);
+                });
+            };
+
+            socket.onmessage = (message) => {
+                const recieved = JSON.parse(message.data);
+                const transcript = recieved.channel.alternatives[0].transcript;
+                if(transcript) {
+                    console.log("Transcript:", transcript);
+                }
+            }
+
             pc.addTrack(ms.getTracks()[0]!);
-            const dc = pc.createDataChannel("oai-events");
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             const sdpResponse = await fetch(`${BACKEND_URL}/api/v1/session/${interviewId}` , {
@@ -26,10 +47,12 @@ export function Interview() {
                     "Content-Type" : "application/sdp",
                 },
             });
+
             const answer = {
                 type: "answer" as "answer",
                 sdp: await sdpResponse.text(),
             };
+            
             await pc.setRemoteDescription(answer);
         })()
     } , [interviewId]);
