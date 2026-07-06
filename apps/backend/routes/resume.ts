@@ -125,4 +125,16 @@ router.post("/session/:interviewId" , async (req , res) => {
   }
 })
 
+router.post("/session1/:interviewId" , async (req , res) => {
+  const { message } = req.body;
+  await prisma.message.create({
+    data: {
+      interviewId: req.params.interviewId,
+      type: "USER",
+      message: message
+    }
+  });
+  res.json({ message: "Message saved" });
+})
+
 export default router;

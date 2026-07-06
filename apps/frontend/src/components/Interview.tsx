@@ -1,6 +1,7 @@
 import { useParams } from "react-router";
 import { useEffect , useRef } from "react";
 import { BACKEND_URL } from "@/lib/config";
+import axios from "axios";
 
 export function Interview() {
     const { interviewId } = useParams<{ interviewId: string }>();
@@ -34,6 +35,9 @@ export function Interview() {
                 const transcript = recieved.channel.alternatives[0].transcript;
                 if(transcript) {
                     console.log("Transcript:", transcript);
+                    axios.post(`${BACKEND_URL}/api/v1/session1/${interviewId}` , {
+                        message: transcript
+                    })
                 }
             }
 
@@ -52,7 +56,7 @@ export function Interview() {
                 type: "answer" as "answer",
                 sdp: await sdpResponse.text(),
             };
-            
+
             await pc.setRemoteDescription(answer);
         })()
     } , [interviewId]);
