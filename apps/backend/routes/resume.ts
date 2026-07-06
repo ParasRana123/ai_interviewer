@@ -7,6 +7,7 @@ import { getGithuStats } from "../services/github.service";
 import { getLeetcodeStats } from "../services/leecode.service";
 import { getCodeforcesStats } from "../services/codeforces.service";
 import { prisma } from "../prisma/db";
+import { initSideband } from "../sideband";
 
 const router = express.Router();
 const upload = multer();
@@ -93,7 +94,7 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
   }
 );
 
-router.post("/session" , async (req , res) => {
+router.post("/session/:interviewId" , async (req , res) => {
   const sessionConfig = JSON.stringify({
     type: "realtime",
     model: "gpt-realtime-2",
@@ -104,7 +105,7 @@ router.post("/session" , async (req , res) => {
   fd.set("sdp" , req.body);
   fd.set("session" , sessionConfig);
   try {
-    const r = await fetch("https://api.openai.com/v1/realtime/calls" , {
+    const sdpResponse = await fetch("https://api.openai.com/v1/realtime/calls" , {
       method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -112,7 +113,11 @@ router.post("/session" , async (req , res) => {
       },
       body: fd
     });
-    const sdp = await r.text();
+    const location = sdpResponse.headers.get("location");
+    const callId = location?.split("/").pop()!;
+    console.log("Call ID:", callId);
+    const sdp = await sdpResponse.text();
+    initSideband(callId, req.params.interviewId);
     res.send(sdp);
   } catch(error) {
     console.error("Token generation error:", error);

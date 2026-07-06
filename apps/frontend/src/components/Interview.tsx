@@ -19,7 +19,7 @@ export function Interview() {
             const dc = pc.createDataChannel("oai-events");
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            const sdpResponse = await fetch(`${BACKEND_URL}/api/v1/session` , {
+            const sdpResponse = await fetch(`${BACKEND_URL}/api/v1/session/${interviewId}` , {
                 method: "POST",
                 body: offer.sdp,
                 headers: {
