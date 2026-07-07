@@ -6,7 +6,8 @@ import { useParams } from "react-router"
 interface Result {
     transcript: { type: "Assistant" | "User" , content: string , createdAt: Date }[],
     score: number,
-    feedback: string
+    feedback: string,
+    status: "DONE" | "INPROGRESS" | "PRE"
 }
 
 export function Result() {
@@ -15,13 +16,17 @@ export function Result() {
     const [result , setResult] = useState<Result>({
         score: 0,
         feedback: "",
-        transcript: []
+        transcript: [],
+        status: "PRE"
     })
 
     useEffect(() => {
         axios.get(`${BACKEND_URL}/api/v1/result/${interviewId}`)
              .then(response => {
                 setResult(response.data)
+                if(response.data.status == "DONE") {
+                    clearInterval(intervalId)
+                }
              })
 
         let intervalId = setInterval(() => {
@@ -38,11 +43,13 @@ export function Result() {
     } , [interviewId])
 
     return <div>
-        Score - {result.score}
-        Feedback - {result.feedback}
-        Transcript - 
-        {result.transcript.sort((a , b) => a.createdAt.getTime() - b.createdAt.getTime()).map(x => <div>
-            {x.type} - {x.content}
-        </div>)}
+        {result.status == "DONE" && <div>
+            Score - {result.score}
+            Feedback - {result.feedback}
+            Transcript - 
+            {result.transcript.sort((a , b) => a.createdAt.getTime() - b.createdAt.getTime()).map(x => <div>
+                {x.type} - {x.content}
+            </div>)}
+        </div>}
     </div>
 }

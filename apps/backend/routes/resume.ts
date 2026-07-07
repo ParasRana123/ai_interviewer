@@ -8,6 +8,7 @@ import { getLeetcodeStats } from "../services/leecode.service";
 import { getCodeforcesStats } from "../services/codeforces.service";
 import { prisma } from "../prisma/db";
 import { initSideband } from "../sideband";
+import { calculateResult } from "../result";
 
 const router = express.Router();
 const upload = multer();
@@ -154,10 +155,6 @@ router.get("/result/:interviewId" , async (req , res) => {
     return
   }
 
-  if(interview.status == "INPROGRESS") {
-    
-  }
-
   res.json({
     score: interview?.score,
     feedback: interview?.feedback,
@@ -167,6 +164,22 @@ router.get("/result/:interviewId" , async (req , res) => {
       createdAt: c.createdAt
     }))
   })
+
+  if(interview.status != "DONE") {
+    const result = await calculateResult(interview.conversations)
+
+    await prisma.interview.update({
+      where: {
+        id: req.params.interviewId
+      },
+      data: {
+        status: "DONE",
+        feedback: result.feedback,
+        score: result.score
+      }
+    })
+  }
+
 })
 
 export default router;
