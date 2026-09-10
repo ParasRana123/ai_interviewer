@@ -36,7 +36,13 @@ export function Interview() {
 
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [candidateInfo, setCandidateInfo] = useState<{ name: string; skills: string[] } | null>(null);
+  const [candidateInfo, setCandidateInfo] = useState<{
+    name: string;
+    skills: string[];
+    education?: any;
+    projects?: any;
+    codingProfiles?: any;
+  } | null>(null);
   const [manualText, setManualText] = useState("");
   const [isMuted, setIsMuted] = useState(false);
   const [isAiVoiceMuted, setIsAiVoiceMuted] = useState(false);
@@ -154,15 +160,26 @@ export function Interview() {
           console.warn("Microphone access notice:", micErr);
         }
 
-        // 2. Start Gemini interview session on backend
+        // 2. Fetch detailed interview profile
         if (interviewId) {
+          try {
+            const detailsRes = await axios.get(`${BACKEND_URL}/api/v1/interview/details/${interviewId}`);
+            if (isMounted && detailsRes.data?.interview) {
+              setCandidateInfo(detailsRes.data.interview);
+            }
+          } catch (detailsErr) {
+            console.warn("Details fetch notice:", detailsErr);
+          }
+
+          // 3. Start Gemini interview session on backend
           const startRes = await axios.post(`${BACKEND_URL}/api/v1/interview/start/${interviewId}`);
           if (isMounted && startRes.data?.success) {
             const initialGreeting = startRes.data.message;
-            setCandidateInfo({
-              name: startRes.data.candidateName || "Candidate",
-              skills: startRes.data.skills || [],
-            });
+            setCandidateInfo((prev) => ({
+              name: startRes.data.candidateName || prev?.name || "Candidate",
+              skills: startRes.data.skills || prev?.skills || [],
+              ...prev,
+            }));
 
             const initialMsg: ChatMessage = {
               id: startRes.data.id || "initial-ai-msg",
@@ -263,7 +280,7 @@ export function Interview() {
             {/* AI Engine Badge */}
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-950/80 text-blue-300 border border-blue-800">
               <Bot className="w-3 h-3 text-blue-400" />
-              <span>Gemini 3.6 Flash</span>
+              <span>Gemini 3.6 Flash (100% Free)</span>
             </span>
 
             {/* Connection Status */}
@@ -285,7 +302,7 @@ export function Interview() {
                     : "bg-rose-400"
                 }`}
               />
-              {connectionStatus === "connected" ? "Interview Active" : "Connecting..."}
+              {connectionStatus === "connected" ? "Live Voice Session" : "Connecting..."}
             </span>
 
             {/* AI Voice Toggle */}
@@ -302,6 +319,21 @@ export function Interview() {
             </button>
           </div>
         </div>
+
+        {/* Candidate Skills Pills & Profile Insights */}
+        {candidateInfo?.skills && candidateInfo.skills.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 px-1 py-0.5 -mt-2">
+            <span className="text-[11px] text-slate-500 font-medium mr-1">Evaluated Skills:</span>
+            {candidateInfo.skills.slice(0, 6).map((skill, idx) => (
+              <span
+                key={idx}
+                className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-800/80 text-slate-300 border border-slate-700/60"
+              >
+                {skill}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Live Transcript / Speech Log */}
         <div className="flex-1 min-h-[300px] max-h-[380px] overflow-y-auto bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-3">
