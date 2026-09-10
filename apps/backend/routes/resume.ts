@@ -101,36 +101,76 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
   }
 );
 
-router.post("/session/:interviewId" , async (req , res) => {
+router.post("/session/:interviewId", async (req, res) => {
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  if (!openaiApiKey) {
+    console.warn("OPENAI_API_KEY is not configured. WebRTC voice calls disabled; client will use Web Speech API.");
+    return res.status(503).json({
+      success: false,
+      error: "OPENAI_API_KEY is not configured.",
+      message: "OpenAI Realtime Voice requires an OPENAI_API_KEY. Speech recognition mode remains fully active.",
+    });
+  }
+
   const sessionConfig = JSON.stringify({
     type: "realtime",
     model: "gpt-realtime-2",
     audio: { output: { voice: "marin" } }
-  })
+  });
 
   const fd = new FormData();
-  fd.set("sdp" , req.body);
-  fd.set("session" , sessionConfig);
+  fd.set("sdp", req.body);
+  fd.set("session", sessionConfig);
+
   try {
-    const sdpResponse = await fetch("https://api.openai.com/v1/realtime/calls" , {
+    const sdpResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${openaiApiKey}`,
         "OpenAI-Safety-Identifier": "hashed-user-id",
       },
-      body: fd
+      body: fd,
     });
+
+    const sdpText = await sdpResponse.text();
+
+    if (!sdpResponse.ok) {
+      console.warn("OpenAI Realtime API response error:", sdpResponse.status, sdpText);
+      return res.status(sdpResponse.status).json({
+        success: false,
+        error: "OpenAI Realtime session generation failed",
+        details: sdpText,
+      });
+    }
+
+    if (!sdpText || !sdpText.trim().startsWith("v=")) {
+      console.warn("OpenAI Realtime returned non-SDP response:", sdpText);
+      return res.status(502).json({
+        success: false,
+        error: "Invalid SDP returned by OpenAI Realtime",
+      });
+    }
+
     const location = sdpResponse.headers.get("location");
-    const callId = location?.split("/").pop()!;
-    console.log("Call ID:", callId);
-    const sdp = await sdpResponse.text();
-    initSideband(callId, req.params.interviewId);
-    res.send(sdp);
-  } catch(error) {
+    const callId = location?.split("/").pop();
+    if (callId) {
+      console.log("OpenAI Realtime Call ID:", callId);
+      initSideband(callId, req.params.interviewId).catch((err) => {
+        console.warn("Sideband initialization warning:", err?.message || err);
+      });
+    }
+
+    res.setHeader("Content-Type", "application/sdp");
+    return res.status(200).send(sdpText);
+  } catch (error: any) {
     console.error("Token generation error:", error);
-    res.status(500).json({ message: "Failed to generate token" });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to generate realtime session",
+      error: error?.message || error,
+    });
   }
-})
+});
 
 router.post("/session1/:interviewId", async (req, res) => {
   try {
