@@ -18,9 +18,9 @@ function getGenerativeModel() {
 }
 
 /**
- * Executes a Gemini model call with exponential backoff retry for 429 rate limits
+ * Executes a Gemini model call with exponential backoff retry for transient rate limits
  */
-async function generateWithRetry(prompt: string, maxRetries = 2): Promise<string | null> {
+async function generateWithRetry(prompt: string, maxRetries = 1): Promise<string | null> {
   let attempt = 0;
   while (attempt <= maxRetries) {
     try {
@@ -33,14 +33,22 @@ async function generateWithRetry(prompt: string, maxRetries = 2): Promise<string
       return null;
     } catch (err: any) {
       attempt++;
-      const isRateLimit = err?.message?.includes("429") || err?.status === 429 || err?.message?.includes("Quota exceeded");
+      const isDailyQuota = err?.message?.includes("Quota exceeded") || err?.message?.includes("free_tier_requests");
+      const isRateLimit = err?.message?.includes("429") || err?.status === 429;
+
+      if (isDailyQuota) {
+        // Daily limit reached (e.g. 20 req/day on free tier) - immediately use adaptive NLU engine
+        console.log("ℹ️ [Gemini API Note]: Daily Free Tier quota limit reached. Using Dynamic Adaptive NLU Engine.");
+        return null;
+      }
+
       if (isRateLimit && attempt <= maxRetries) {
-        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-        console.warn(`Gemini rate limit 429 encountered, retrying attempt ${attempt}/${maxRetries} in ${Math.round(delay)}ms...`);
+        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 400;
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
-      console.warn("Gemini generation notice:", err?.message || err);
+
+      console.warn("ℹ️ [Gemini Generation Notice]:", err?.message?.substring(0, 90) || err);
       break;
     }
   }
