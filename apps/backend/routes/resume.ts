@@ -177,31 +177,114 @@ router.post("/session/:interviewId", async (req, res) => {
   }
 });
 
+import { startInterviewSession, generateNextInterviewTurn } from "../services/interview.service";
+
+router.post("/interview/start/:interviewId", async (req, res) => {
+  try {
+    const { interviewId } = req.params;
+    if (!interviewId) {
+      return res.status(400).json({ success: false, error: "Missing interviewId" });
+    }
+    const result = await startInterviewSession(interviewId);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("Error starting interview session:", error);
+    return res.status(500).json({
+      success: false,
+      error: error?.message || "Failed to start interview session",
+    });
+  }
+});
+
+router.post("/interview/respond/:interviewId", async (req, res) => {
+  try {
+    const { interviewId } = req.params;
+    const { message } = req.body;
+
+    if (!interviewId) {
+      return res.status(400).json({ success: false, error: "Missing interviewId" });
+    }
+
+    if (!message || typeof message !== "string" || !message.trim()) {
+      return res.status(400).json({ success: false, error: "Message content cannot be empty" });
+    }
+
+    const result = await generateNextInterviewTurn(interviewId, message.trim());
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("Error generating interview response:", error);
+    return res.status(500).json({
+      success: false,
+      error: error?.message || "Failed to generate interview response",
+    });
+  }
+});
+
+router.get("/interview/details/:interviewId", async (req, res) => {
+  try {
+    const { interviewId } = req.params;
+    const interview = await prisma.interview.findUnique({
+      where: { id: interviewId },
+      include: {
+        conversations: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!interview) {
+      return res.status(404).json({ success: false, error: "Interview not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      interview: {
+        id: interview.id,
+        name: interview.name,
+        email: interview.email,
+        education: interview.education,
+        experience: interview.experience,
+        projects: interview.projects,
+        skills: interview.skills,
+        codingProfiles: interview.codingProfiles,
+        status: interview.status,
+        conversations: interview.conversations.map((c) => ({
+          id: c.id,
+          type: c.type,
+          message: c.message,
+          createdAt: c.createdAt,
+        })),
+      },
+    });
+  } catch (error: any) {
+    console.error("Error fetching interview details:", error);
+    return res.status(500).json({ success: false, error: "Failed to fetch details" });
+  }
+});
+
 router.post("/session1/:interviewId", async (req, res) => {
   try {
     const { interviewId } = req.params;
     const { message } = req.body;
 
     if (!interviewId) {
-      return res.status(400).json({ error: "Missing interviewId parameter" });
+      return res.status(400).json({ success: false, error: "Missing interviewId parameter" });
     }
 
     if (!message || typeof message !== "string" || !message.trim()) {
-      return res.status(400).json({ error: "Message content cannot be empty" });
+      return res.status(400).json({ success: false, error: "Message content cannot be empty" });
     }
 
-    const savedMessage = await prisma.message.create({
-      data: {
-        interviewId,
-        type: "USER",
-        message: message.trim(),
-      },
+    const result = await generateNextInterviewTurn(interviewId, message.trim());
+    return res.status(200).json({
+      success: true,
+      message: "User transcript processed",
+      reply: result.reply,
+      id: result.id,
     });
-
-    return res.status(200).json({ success: true, message: "User transcript saved", id: savedMessage.id });
   } catch (error: any) {
-    console.error("Error saving user transcript message:", error);
-    return res.status(500).json({ error: "Failed to save message" });
+    console.error("Error in session1 turn:", error);
+    return res.status(500).json({ success: false, error: "Failed to process interview response" });
   }
 });
 
