@@ -17,29 +17,8 @@ export function Interview() {
                 audio: true,
             });
 
-            const socket = new WebSocket('wss://api.deepgram.com/v1/listen' , [
-                'token',
-                process.env.DEEPGRAM_API_KEY!
-            ]);
-
-            socket.onopen = () => {
-                const mediaRecorder = new MediaRecorder(ms , { mimeType: "audio/webm" });
-                mediaRecorder.start(250);
-                mediaRecorder.addEventListener("dataavailable" , (e) => {
-                    socket.send(e.data);
-                });
-            };
-
-            socket.onmessage = (message) => {
-                const recieved = JSON.parse(message.data);
-                const transcript = recieved.channel.alternatives[0].transcript;
-                if(transcript) {
-                    console.log("Transcript:", transcript);
-                    axios.post(`${BACKEND_URL}/api/v1/session1/${interviewId}` , {
-                        message: transcript
-                    })
-                }
-            }
+            // Removed paid Deepgram WebSocket and process.env.DEEPGRAM_API_KEY to prevent client ReferenceError
+            // Free Web Speech API will handle speech-to-text directly in the browser
 
             pc.addTrack(ms.getTracks()[0]!);
             const offer = await pc.createOffer();
