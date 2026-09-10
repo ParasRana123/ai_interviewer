@@ -26,7 +26,8 @@ function extractHeuristics(text: string) {
         "Java", "C++", "Go", "Rust", "SQL", "PostgreSQL", "MongoDB", "Docker",
         "Kubernetes", "AWS", "Git", "HTML", "CSS", "TailwindCSS", "Express"
     ];
-    const detectedSkills = commonSkills.filter((s) => new RegExp(`\\b${s}\\b`, "i").test(text));
+    const textLower = text.toLowerCase();
+    const detectedSkills = commonSkills.filter((s) => textLower.includes(s.toLowerCase()));
 
     return {
         name: name || "Candidate",
