@@ -14,18 +14,21 @@ An intelligent, real-time AI technical interviewer platform that parses candidat
   - **Semantic Concept Extraction**: Dynamically identifies key technical domains in candidate speech (real-time sync, WebSockets, music rooms, database design, caching, search debouncing, API scaling) and asks deeply relevant technical questions.
   - **100% Anti-Repetition Guarantee**: Tracks conversational history across the entire session to ensure no question, phrasing, or topic is ever repeated.
   - **Quota Resilience & Graceful Fallback**: Gracefully transitions to the local Adaptive NLU Dialogue Engine if external Gemini API limits are reached, ensuring zero downtime and instant speech response times.
+- **Realistic 2-Tile Voice Call UI (AI & Candidate Avatars)**:
+  - **AI Senior Interviewer Tile**: Realistic avatar with futuristic glowing orb, concentric animated sound ripples (`animate-ping`), dynamic frequency wave bars, and real-time state pills (`Speaking`, `Analyzing`, `Listening`).
+  - **Candidate Avatar Tile**: Dynamic initials avatar, real-time Web Audio API frequency equalizer responding live to candidate speech, and turn metrics.
+  - **Live Closed Captions Strip**: Real-time meeting subtitle bar (like Google Meet / Zoom CC) showing spoken dialogue synchronously.
+  - **In-Call Controls Floating Toolbar**: Sleek bottom dock with live call timer (`03:45`), Mic Mute/Unmute, AI Speaker Mute/Unmute, Replay Last Question, Fallback Chat Drawer, and prominent Red End-Call Hangup button (`End Call & View Report`).
 - **Free Spoken Interactivity (STT & TTS)**:
   - **Speech-to-Text (STT)**: Browser-native **Web Speech API** (`SpeechRecognition` / `webkitSpeechRecognition`) for real-time speech transcription with zero latency.
   - **Text-to-Speech (TTS)**: Browser-native **Speech Synthesis API** (`speechSynthesis`) with automatic natural voice selection and continuous speech queue management.
 - **Intelligent Turn-Taking State Machine**: Automatically pauses microphone listening while the AI speaks to prevent audio feedback/echo loops and resumes listening seamlessly.
-- **Live Candidate Profile & Audio Wave Visualizer**:
-  - Real-time microphone audio frequency visualizer powered by Web Audio API.
-  - Dynamic AI voice speech wave animation.
-  - Live candidate profile sidebar displaying extracted skills, repositories, and competitive programming ratings.
-  - Interactive interview controls: Mute/Unmute microphone, Interrupt/Pause AI speaking, and Replay current question.
-- **Automated Performance Evaluation & Export**:
+- **Automated Performance Evaluation & Comprehensive Report**:
   - Automatically evaluates candidate answers out of 10 with constructive feedback.
-  - Export complete interview reports and conversation transcripts as **Markdown (`.md`)** or **JSON (`.json`)**, or copy to clipboard with one click.
+  - **Where You Were Exceptional**: 2–3 structured bullet points highlighting strong architectural and problem-solving skills.
+  - **Areas for Improvement**: 2–3 actionable growth recommendations for subsequent rounds.
+  - **Complete Transcript Log**: Displayed cleanly at the end of the interview in the evaluation dashboard.
+  - Export complete interview reports as **Markdown (`.md`)** or **JSON (`.json`)**, or copy to clipboard with one click.
 
 ---
 
