@@ -353,6 +353,28 @@ export function Interview() {
             </div>
           )}
 
+          {/* AI Speaking Live Indicator with Interrupt Button */}
+          {isAiSpeaking && (
+            <div className="self-start bg-blue-950/70 border border-blue-800/80 text-blue-200 rounded-xl px-4 py-2 text-xs flex items-center justify-between gap-3 w-full max-w-md animate-in fade-in duration-150">
+              <div className="flex items-center gap-2">
+                <Volume2 className="w-3.5 h-3.5 text-blue-400 animate-bounce" />
+                <span className="font-medium">AI Interviewer is speaking...</span>
+                <span className="flex items-center gap-0.5">
+                  <span className="w-1 h-2 bg-blue-400 animate-pulse" />
+                  <span className="w-1 h-3.5 bg-blue-300 animate-pulse delay-75" />
+                  <span className="w-1 h-2.5 bg-blue-400 animate-pulse delay-150" />
+                  <span className="w-1 h-4 bg-blue-300 animate-pulse delay-100" />
+                </span>
+              </div>
+              <button
+                onClick={cancelSpeech}
+                className="px-2 py-1 bg-blue-800/60 hover:bg-blue-700 text-[11px] font-medium rounded-lg text-white transition-colors"
+              >
+                Interrupt AI
+              </button>
+            </div>
+          )}
+
           {/* Real-time Interim Candidate Speech */}
           {interimTranscript && (
             <div className="self-end bg-blue-600/40 border border-blue-400/30 text-blue-100 italic max-w-[85%] rounded-xl px-4 py-2.5 text-sm animate-pulse">
