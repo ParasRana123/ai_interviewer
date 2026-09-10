@@ -68,6 +68,51 @@ describe("Gemini Interview Pipeline & Services", () => {
     expect(cleanedText).not.toContain("*");
     expect(cleanedText).not.toContain("`");
   });
+
+  it("should classify candidate corrections and extract semantic topics like music collaboration rooms", () => {
+    const correctionMsg = "no actually and that problem statement there was no data handling data validation it was actually a platform where the users can come enjoy the room with their friends and they can listen to the favourite music in the room";
+    expect(classifyCandidateIntent(correctionMsg)).toBe("CORRECTION");
+
+    const mockContext: DialogContext = {
+      candidateName: "Paras Rana",
+      skills: ["React", "Node.js", "WebSockets"],
+      projects: [],
+      experience: [],
+      history: [
+        { type: "ASSISTANT", message: "Hello Paras! Could you introduce yourself?" },
+        { type: "USER", message: "I built a web platform." },
+        { type: "ASSISTANT", message: "Could you walk me through data validation for that solution?" }
+      ],
+    };
+
+    const response = generateContextualFallback(mockContext, correctionMsg);
+    expect(response).toContain("Paras");
+    expect(response.toLowerCase()).not.toContain("data validation");
+    // Should address the music/audio synchronization context
+    expect(response.toLowerCase()).toMatch(/synchronized|playback|music|room/);
+  });
+
+  it("should guarantee 100% non-repetition across multiple sequential candidate turns", () => {
+    const mockContext: DialogContext = {
+      candidateName: "Paras Rana",
+      skills: ["React", "Node.js", "PostgreSQL", "Docker"],
+      projects: [{ title: "Music Sync", description: "Realtime audio player" }],
+      experience: [],
+      history: [],
+    };
+
+    const generatedQuestions = new Set<string>();
+
+    for (let i = 0; i < 5; i++) {
+      const userMsg = i === 0 ? "I built a collaborative music listening platform" : "We used WebSockets for audio sync and PostgreSQL for storage";
+      const reply = generateContextualFallback(mockContext, userMsg);
+      
+      expect(generatedQuestions.has(reply)).toBe(false);
+      generatedQuestions.add(reply);
+      mockContext.history.push({ type: "USER", message: userMsg });
+      mockContext.history.push({ type: "ASSISTANT", message: reply });
+    }
+
+    expect(generatedQuestions.size).toBe(5);
+  });
 });
-
-
