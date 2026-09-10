@@ -226,48 +226,94 @@ router.post("/session1/:interviewId", async (req, res) => {
   }
 });
 
-router.get("/result/:interviewId" , async (req , res) => {
-  const interview = await prisma.interview.findFirst({
-    where: {
-      id: req.params.interviewId
-    },
-    include: {
-      conversations: true
-    }
-  })
-
-  if(!interview) {
-    res.status(411).json({
-      message: "Interview not found"
-    })
-    return
-  }
-
-  res.json({
-    score: interview?.score,
-    feedback: interview?.feedback,
-    transcript: interview?.conversations.map(c => ({
-      type: c.type,
-      content: c.message,
-      createdAt: c.createdAt
-    }))
-  })
-
-  if(interview.status != "DONE") {
-    const result = await calculateResult(interview.conversations)
-
-    await prisma.interview.update({
+router.get("/result/:interviewId", async (req, res) => {
+  try {
+    const { interviewId } = req.params;
+    let interview = await prisma.interview.findFirst({
       where: {
-        id: req.params.interviewId
+        id: interviewId,
       },
-      data: {
-        status: "DONE",
-        feedback: result.feedback,
-        score: result.score
-      }
-    })
-  }
+      include: {
+        conversations: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
 
-})
+    if (!interview) {
+      return res.status(404).json({
+        message: "Interview not found",
+      });
+    }
+
+    let feedbackText = interview.feedback || "";
+    let strengths: string[] = [];
+    let improvements: string[] = [];
+    let score = interview.score || 0;
+
+    // Parse existing structured JSON feedback if present
+    if (interview.feedback) {
+      try {
+        const parsed = JSON.parse(interview.feedback);
+        if (parsed && typeof parsed === "object") {
+          feedbackText = parsed.feedback || feedbackText;
+          strengths = Array.isArray(parsed.strengths) ? parsed.strengths : [];
+          improvements = Array.isArray(parsed.improvements) ? parsed.improvements : [];
+        }
+      } catch (e) {
+        // Plain text feedback legacy format
+      }
+    }
+
+    // If interview is not yet calculated or status is not DONE, compute it now
+    if (interview.status !== "DONE" || !interview.feedback || score === 0) {
+      const evaluation = await calculateResult(
+        interview.conversations.map((c) => ({
+          type: c.type as "ASSISTANT" | "USER",
+          message: c.message,
+          createdAt: c.createdAt,
+        }))
+      );
+
+      feedbackText = evaluation.feedback;
+      score = evaluation.score;
+      strengths = evaluation.strengths || [];
+      improvements = evaluation.improvements || [];
+
+      const serializedFeedback = JSON.stringify({
+        feedback: evaluation.feedback,
+        strengths: evaluation.strengths,
+        improvements: evaluation.improvements,
+      });
+
+      await prisma.interview.update({
+        where: {
+          id: interviewId,
+        },
+        data: {
+          status: "DONE",
+          feedback: serializedFeedback,
+          score: evaluation.score,
+        },
+      });
+    }
+
+    return res.json({
+      score,
+      feedback: feedbackText,
+      strengths,
+      improvements,
+      status: "DONE",
+      transcript: interview.conversations.map((c) => ({
+        type: c.type,
+        content: c.message,
+        createdAt: c.createdAt,
+      })),
+    });
+  } catch (err: any) {
+    console.error("Error generating interview result:", err);
+    return res.status(500).json({ message: "Failed to generate interview report" });
+  }
+});
 
 export default router;
