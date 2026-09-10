@@ -109,14 +109,17 @@ export function Interview() {
   const {
     isSupported: isSttSupported,
     isListening,
-    interimTranscript,
+    liveTranscript,
     error: speechError,
     startListening,
     stopListening,
+    commitTranscript,
+    resetTranscript,
   } = useSpeechRecognition({
     continuous: true,
     interimResults: true,
     lang: "en-US",
+    silenceTimeoutMs: 1800,
     onFinalTranscript: sendCandidateAnswer,
   });
 
@@ -130,7 +133,7 @@ export function Interview() {
         if (!isMuted && !isAiSpeaking) {
           startListening();
         }
-      }, 350);
+      }, 300);
       return () => clearTimeout(timer);
     }
   }, [isAiSpeaking, isMuted, isInitialized, connectionStatus, startListening, stopListening]);
@@ -138,7 +141,7 @@ export function Interview() {
   // Auto-scroll transcript container
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, interimTranscript]);
+  }, [messages, liveTranscript]);
 
   // Initialize Microphone Media Stream and Start Session
   useEffect(() => {
@@ -248,6 +251,7 @@ export function Interview() {
 
     const textToSend = manualText.trim();
     setManualText("");
+    resetTranscript();
     await sendCandidateAnswer(textToSend);
   };
 
@@ -409,11 +413,26 @@ export function Interview() {
             </div>
           )}
 
-          {/* Real-time Interim Candidate Speech */}
-          {interimTranscript && (
-            <div className="self-end bg-blue-600/40 border border-blue-400/30 text-blue-100 italic max-w-[85%] rounded-xl px-4 py-2.5 text-sm animate-pulse">
-              <span className="text-[10px] opacity-75 block mb-1">Transcribing your voice...</span>
-              <p>{interimTranscript}</p>
+          {/* Real-time Candidate Speech Transcript */}
+          {liveTranscript && (
+            <div className="self-end bg-blue-600/30 border border-blue-400/40 text-blue-100 max-w-[88%] rounded-xl p-3.5 text-sm shadow-lg shadow-blue-950/40 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between gap-3 mb-1.5 pb-1 border-b border-blue-400/20">
+                <div className="flex items-center gap-1.5 text-xs text-blue-300 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span>Hearing your speech in real-time...</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={commitTranscript}
+                  disabled={isAiThinking}
+                  className="px-2.5 py-1 bg-blue-500 hover:bg-blue-400 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 shadow-sm"
+                >
+                  <Send className="w-3 h-3" />
+                  <span>Send Answer Now</span>
+                </button>
+              </div>
+              <p className="font-normal italic leading-relaxed text-slate-100">"{liveTranscript}"</p>
+              <p className="text-[10px] text-blue-300/80 mt-1.5">Auto-submits when you pause speaking for 1.8s</p>
             </div>
           )}
 
@@ -432,8 +451,14 @@ export function Interview() {
           />
           <button
             type="submit"
-            disabled={!manualText.trim() || isAiThinking}
-            className="p-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl transition-all shadow-md shadow-blue-950"
+            disabled={(!manualText.trim() && !liveTranscript.trim()) || isAiThinking}
+            onClick={(e) => {
+              if (!manualText.trim() && liveTranscript.trim()) {
+                e.preventDefault();
+                commitTranscript();
+              }
+            }}
+            className="p-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl transition-all shadow-md shadow-blue-950 flex items-center justify-center"
             title="Send response"
           >
             <Send className="w-4 h-4" />
