@@ -47,10 +47,11 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     }
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.stop();
+        recognitionRef.current.abort();
       } catch (err) {
         // Ignore errors when stopping already inactive recognition
       }
+      recognitionRef.current = null;
     }
     setIsListening(false);
     setInterimTranscript("");
@@ -77,6 +78,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       } catch (e) {
         // ignore
       }
+      recognitionRef.current = null;
     }
 
     try {
@@ -92,9 +94,15 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       };
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
+        if (!event || !event.results) return;
+
         let currentInterim = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
+        const startIndex = typeof event.resultIndex === "number" ? event.resultIndex : 0;
+
+        for (let i = startIndex; i < event.results.length; i++) {
           const resultItem = event.results[i];
+          if (!resultItem) continue;
+
           const text = resultItem[0]?.transcript || "";
 
           if (resultItem.isFinal) {
@@ -112,6 +120,8 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       };
 
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        if (!event) return;
+
         // 'no-speech' is a normal event when the user pauses talking, do not treat as fatal
         if (event.error === "no-speech") {
           return;
@@ -121,7 +131,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
           return;
         }
 
-        const friendlyMessage = getSpeechErrorMessage(event.error);
+        const friendlyMessage = getSpeechErrorMessage(event.error || "unknown");
         setError(friendlyMessage);
         onErrorRef.current?.(friendlyMessage);
 
@@ -143,9 +153,13 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
           restartTimeoutRef.current = setTimeout(() => {
             if (shouldBeListeningRef.current) {
               try {
-                recognition.start();
+                if (recognitionRef.current) {
+                  recognitionRef.current.start();
+                } else {
+                  startListening();
+                }
               } catch (e) {
-                // If start fails, attempt a fresh start
+                // If start fails (e.g. already started), attempt a clean restart
                 startListening();
               }
             }
@@ -173,6 +187,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       shouldBeListeningRef.current = false;
       if (restartTimeoutRef.current) {
         clearTimeout(restartTimeoutRef.current);
+        restartTimeoutRef.current = null;
       }
       if (recognitionRef.current) {
         try {
@@ -180,6 +195,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
         } catch (e) {
           // ignore
         }
+        recognitionRef.current = null;
       }
     };
   }, []);
