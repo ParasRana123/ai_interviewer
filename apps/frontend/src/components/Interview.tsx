@@ -32,6 +32,7 @@ export function Interview() {
   const { interviewId } = useParams<{ interviewId: string }>();
   const navigate = useNavigate();
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
@@ -152,6 +153,7 @@ export function Interview() {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           if (isMounted) {
             mediaStreamRef.current = stream;
+            setAudioStream(stream);
             startListening();
           } else {
             stream.getTracks().forEach((t) => t.stop());
@@ -453,7 +455,7 @@ export function Interview() {
               <span>{isMuted ? "Unmute Mic" : "Mute Mic"}</span>
             </button>
 
-            <AudioVisualizer stream={mediaStreamRef.current} isActive={isListening && !isMuted} />
+            <AudioVisualizer stream={audioStream} isActive={isListening && !isMuted} />
           </div>
 
           <button
