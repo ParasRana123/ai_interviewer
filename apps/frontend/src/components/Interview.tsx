@@ -20,6 +20,7 @@ export function Interview() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
+  const [sessionMode, setSessionMode] = useState<"voice" | "speech-stt">("speech-stt");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isMuted, setIsMuted] = useState(false);
 
@@ -90,8 +91,10 @@ export function Interview() {
           if (!pc) return;
           if (pc.connectionState === "connected") {
             setConnectionStatus("connected");
+            setSessionMode("voice");
           } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-            setConnectionStatus("disconnected");
+            setConnectionStatus(mediaStreamRef.current ? "connected" : "disconnected");
+            setSessionMode("speech-stt");
           }
         };
 
@@ -134,9 +137,10 @@ export function Interview() {
         if (!isMounted || !pc || pc.signalingState === "closed") return;
 
         if (!sdpResponse.ok) {
-          console.warn(`Realtime session endpoint responded with ${sdpResponse.status}: ${sdpResponse.statusText}`);
+          console.info(`OpenAI Realtime Voice optional endpoint returned ${sdpResponse.status}. Active mode: Free Web Speech STT.`);
           if (isMounted) {
-            setConnectionStatus("connected"); // STT speech mode active
+            setConnectionStatus("connected");
+            setSessionMode("speech-stt");
           }
           return;
         }
@@ -151,17 +155,22 @@ export function Interview() {
             sdp: sdpText,
           };
           await pc.setRemoteDescription(answer);
+          if (isMounted) {
+            setSessionMode("voice");
+            setConnectionStatus("connected");
+          }
         } else {
-          console.warn("Server returned non-SDP payload for WebRTC session, using speech transcription mode:", sdpText);
+          console.info("WebRTC voice optional stream not active. Client running in high-accuracy Web Speech STT mode.");
           if (isMounted) {
             setConnectionStatus("connected");
+            setSessionMode("speech-stt");
           }
         }
       } catch (error: any) {
         console.warn("Interview WebRTC notice:", error?.message || error);
         if (isMounted) {
-          // If microphone is active and Speech STT is working, consider session connected for interview
           setConnectionStatus(mediaStreamRef.current ? "connected" : "disconnected");
+          setSessionMode("speech-stt");
         }
       }
     }
