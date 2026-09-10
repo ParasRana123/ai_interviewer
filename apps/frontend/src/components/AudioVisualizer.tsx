@@ -11,28 +11,49 @@ export function AudioVisualizer({ stream, isActive }: AudioVisualizerProps) {
   const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
-    if (!canvasRef.current || !stream || !isActive) {
-      return;
-    }
-
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Draw idle state if stream is not available or inactive
+    if (!stream || !isActive || stream.getAudioTracks().length === 0) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#334155";
+      const totalBars = 16;
+      const barWidth = canvas.width / totalBars - 2;
+      for (let i = 0; i < totalBars; i++) {
+        const x = i * (barWidth + 2);
+        ctx.fillRect(x, canvas.height / 2 - 2, barWidth, 4);
+      }
+      return;
+    }
+
+    let isSubscribed = true;
+
     try {
+      if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+      }
+
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+
       const audioCtx = new AudioCtx();
       audioContextRef.current = audioCtx;
 
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 64;
+      analyser.smoothingTimeConstant = 0.8;
       source.connect(analyser);
 
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
 
       const draw = () => {
+        if (!isSubscribed) return;
         animationFrameRef.current = requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
@@ -42,15 +63,15 @@ export function AudioVisualizer({ stream, isActive }: AudioVisualizerProps) {
         let x = 0;
 
         for (let i = 0; i < bufferLength; i++) {
-          const barHeight = (dataArray[i] / 255) * canvas.height * 0.85;
+          const barHeight = Math.max((dataArray[i] / 255) * canvas.height * 0.9, 3);
 
           const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
-          gradient.addColorStop(0, "#3b82f6");
+          gradient.addColorStop(0, "#2563eb");
           gradient.addColorStop(1, "#60a5fa");
 
           ctx.fillStyle = gradient;
           ctx.beginPath();
-          ctx.roundRect(x, canvas.height - barHeight, Math.max(barWidth - 2, 2), barHeight, [2, 2, 0, 0]);
+          ctx.roundRect(x, (canvas.height - barHeight) / 2, Math.max(barWidth - 2, 2), barHeight, [2, 2, 2, 2]);
           ctx.fill();
 
           x += barWidth + 1;
@@ -63,11 +84,14 @@ export function AudioVisualizer({ stream, isActive }: AudioVisualizerProps) {
     }
 
     return () => {
+      isSubscribed = false;
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
       if (audioContextRef.current && audioContextRef.current.state !== "closed") {
         audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
       }
     };
   }, [stream, isActive]);
@@ -77,7 +101,7 @@ export function AudioVisualizer({ stream, isActive }: AudioVisualizerProps) {
       <div className="flex items-center gap-1.5">
         <span className={`w-2 h-2 rounded-full ${isActive ? "bg-emerald-400 animate-pulse" : "bg-slate-600"}`} />
         <span className="text-xs text-slate-400 font-medium">
-          {isActive ? "Microphone Active" : "Microphone Idle"}
+          {isActive ? "Microphone Live" : "Microphone Idle"}
         </span>
       </div>
       <canvas
