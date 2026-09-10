@@ -3,23 +3,13 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { BACKEND_URL } from "@/lib/config";
 import { useSpeechRecognition } from "@/lib/useSpeechRecognition";
 import { useSpeechSynthesis } from "@/lib/useSpeechSynthesis";
-import { AudioVisualizer } from "@/components/AudioVisualizer";
+import { AiCallTile } from "@/components/AiCallTile";
+import { UserCallTile } from "@/components/UserCallTile";
+import { LiveCaptionsStrip } from "@/components/LiveCaptionsStrip";
+import { CallControlsBar } from "@/components/CallControlsBar";
+import { InCallChatDrawer } from "@/components/InCallChatDrawer";
 import axios from "axios";
-import {
-  Mic,
-  MicOff,
-  Sparkles,
-  Send,
-  LogOut,
-  Radio,
-  Volume2,
-  VolumeX,
-  RotateCcw,
-  Bot,
-  User,
-  Loader2,
-  CheckCircle2,
-} from "lucide-react";
+import { Sparkles, Bot, User, Radio, ShieldCheck } from "lucide-react";
 
 interface ChatMessage {
   id: string;
@@ -34,7 +24,6 @@ export function Interview() {
   const navigate = useNavigate();
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
-  const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -45,11 +34,13 @@ export function Interview() {
     projects?: any;
     codingProfiles?: any;
   } | null>(null);
+
   const [manualText, setManualText] = useState("");
   const [isMuted, setIsMuted] = useState(false);
   const [isAiVoiceMuted, setIsAiVoiceMuted] = useState(false);
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
 
   // Speech Synthesis Hook for AI Voice responses
   const {
@@ -130,7 +121,6 @@ export function Interview() {
     if (isAiSpeaking) {
       stopListening();
     } else if (!isMuted && isInitialized && connectionStatus === "connected") {
-      // Add a slight delay after speech finishes before unmuting mic to avoid tail audio echo
       const timer = setTimeout(() => {
         if (!isMuted && !isAiSpeaking) {
           startListening();
@@ -140,11 +130,6 @@ export function Interview() {
     }
   }, [isAiSpeaking, isMuted, isInitialized, connectionStatus, startListening, stopListening]);
 
-  // Auto-scroll transcript container
-  useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, liveTranscript]);
-
   // Initialize Microphone Media Stream and Start Session
   useEffect(() => {
     let isMounted = true;
@@ -153,7 +138,7 @@ export function Interview() {
       try {
         setConnectionStatus("connecting");
 
-        // 1. Acquire microphone stream for live AudioVisualizer
+        // 1. Acquire microphone stream for live User audio wave visualizer
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           if (isMounted) {
@@ -205,7 +190,7 @@ export function Interview() {
       } catch (err) {
         console.error("Interview session initialization error:", err);
         if (isMounted) {
-          setConnectionStatus("connected"); // Still allow manual chat
+          setConnectionStatus("connected");
         }
       }
     }
@@ -225,6 +210,7 @@ export function Interview() {
     };
   }, [interviewId, isInitialized, startListening, stopListening, speak, cancelSpeech]);
 
+  // Toggle candidate microphone
   const toggleMuteMic = () => {
     if (mediaStreamRef.current) {
       const audioTrack = mediaStreamRef.current.getAudioTracks()[0];
@@ -240,6 +226,7 @@ export function Interview() {
     setIsMuted(!isMuted);
   };
 
+  // Toggle AI speaker voice
   const toggleAiVoice = () => {
     if (!isAiVoiceMuted) {
       cancelSpeech();
@@ -247,6 +234,15 @@ export function Interview() {
     setIsAiVoiceMuted(!isAiVoiceMuted);
   };
 
+  // Replay last AI statement
+  const handleReplayQuestion = () => {
+    const lastAiMsg = [...messages].reverse().find((m) => m.sender === "interviewer");
+    if (lastAiMsg && lastAiMsg.text) {
+      speak(lastAiMsg.text);
+    }
+  };
+
+  // Manual text submission fallback in drawer
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualText.trim() || isAiThinking) return;
@@ -257,6 +253,7 @@ export function Interview() {
     await sendCandidateAnswer(textToSend);
   };
 
+  // End the live call and navigate to detailed report / evaluation dashboard
   const endInterview = () => {
     stopListening();
     cancelSpeech();
@@ -266,244 +263,120 @@ export function Interview() {
     navigate(`/result/${interviewId}`);
   };
 
+  const lastAiMessage = [...messages].reverse().find((m) => m.sender === "interviewer")?.text || "";
+  const candidateTurnsCount = messages.filter((m) => m.sender === "candidate").length;
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 md:p-6">
-      <div className="w-full max-w-3xl bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl shadow-2xl p-5 sm:p-6 flex flex-col gap-5">
-        {/* Header with Connection & Status Badges */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
-          <div className="space-y-0.5">
+    <div className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col items-center justify-between p-3 sm:p-5 md:p-6 select-none overflow-x-hidden">
+      {/* Top Header Bar */}
+      <header className="w-full max-w-6xl flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 backdrop-blur-md border border-slate-800/80 rounded-2xl px-4 py-3 shadow-lg">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-950">
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div>
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-blue-400" />
-              <h1 className="text-lg font-bold text-slate-100">AI Technical Interview</h1>
-              {candidateInfo?.name && (
-                <span className="text-xs text-slate-400 font-normal">
-                  • Candidate: {candidateInfo.name}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-500">Session ID: {interviewId}</p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* AI Engine Badge */}
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-950/80 text-blue-300 border border-blue-800">
-              <Bot className="w-3 h-3 text-blue-400" />
-              <span>Gemini 3.6 Flash (100% Free)</span>
-            </span>
-
-            {/* Connection Status */}
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${
-                connectionStatus === "connected"
-                  ? "bg-emerald-950/80 text-emerald-400 border-emerald-800"
-                  : connectionStatus === "connecting"
-                  ? "bg-amber-950/80 text-amber-400 border-amber-800 animate-pulse"
-                  : "bg-rose-950/80 text-rose-400 border-rose-800"
-              }`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  connectionStatus === "connected"
-                    ? "bg-emerald-400"
-                    : connectionStatus === "connecting"
-                    ? "bg-amber-400"
-                    : "bg-rose-400"
-                }`}
-              />
-              {connectionStatus === "connected" ? "Live Voice Session" : "Connecting..."}
-            </span>
-
-            {/* AI Voice Toggle */}
-            <button
-              onClick={toggleAiVoice}
-              title={isAiVoiceMuted ? "Unmute AI Voice" : "Mute AI Voice"}
-              className={`p-1.5 rounded-lg border text-xs transition-colors ${
-                isAiVoiceMuted
-                  ? "bg-slate-800 text-slate-400 border-slate-700"
-                  : "bg-blue-950 text-blue-300 border-blue-800"
-              }`}
-            >
-              {isAiVoiceMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Candidate Skills Pills & Profile Insights */}
-        {candidateInfo?.skills && candidateInfo.skills.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 px-1 py-0.5 -mt-2">
-            <span className="text-[11px] text-slate-500 font-medium mr-1">Evaluated Skills:</span>
-            {candidateInfo.skills.slice(0, 6).map((skill, idx) => (
-              <span
-                key={idx}
-                className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-800/80 text-slate-300 border border-slate-700/60"
-              >
-                {skill}
+              <h1 className="text-sm sm:text-base font-bold text-slate-100">Live AI Technical Interview</h1>
+              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-950 text-blue-300 border border-blue-800">
+                Gemini 3.6 Flash
               </span>
-            ))}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {candidateInfo?.name ? `Candidate: ${candidateInfo.name}` : "Real-Time AI Voice Assessment"}
+            </p>
           </div>
-        )}
-
-        {/* Live Transcript / Speech Log */}
-        <div className="flex-1 min-h-[300px] max-h-[380px] overflow-y-auto bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-3">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex flex-col max-w-[85%] rounded-xl px-4 py-3 text-sm transition-all ${
-                msg.sender === "candidate"
-                  ? "self-end bg-blue-600 text-white shadow-md"
-                  : "self-start bg-slate-800/90 border border-slate-700 text-slate-200 shadow-sm"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-3 text-[11px] opacity-75 mb-1.5">
-                <div className="flex items-center gap-1.5 font-semibold">
-                  {msg.sender === "candidate" ? (
-                    <>
-                      <User className="w-3 h-3" />
-                      <span>You (Candidate)</span>
-                    </>
-                  ) : (
-                    <>
-                      <Bot className="w-3 h-3 text-blue-400" />
-                      <span>AI Technical Interviewer</span>
-                      {msg.intent === "AUDIO_CHECK" && (
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/70 text-emerald-300 border border-emerald-800/50 font-normal">
-                          Audio Verified
-                        </span>
-                      )}
-                      {msg.intent === "REPEAT_REQUEST" && (
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-950/70 text-blue-300 border border-blue-800/50 font-normal">
-                          Clarification
-                        </span>
-                      )}
-                    </>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span>{msg.timestamp}</span>
-                  {msg.sender === "interviewer" && isTtsSupported && (
-                    <button
-                      onClick={() => speak(msg.text)}
-                      title="Replay speech audio"
-                      className="p-1 hover:bg-slate-700 rounded transition-colors opacity-80 hover:opacity-100"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <p className="leading-relaxed">{msg.text}</p>
-            </div>
-          ))}
-
-          {/* AI Thinking Indicator */}
-          {isAiThinking && (
-            <div className="self-start bg-slate-800/80 border border-slate-700 text-slate-300 rounded-xl px-4 py-2.5 text-xs flex items-center gap-2 animate-pulse">
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-              <span>AI Interviewer is formulating feedback & next question...</span>
-            </div>
-          )}
-
-          {/* AI Speaking Live Indicator with Interrupt Button */}
-          {isAiSpeaking && (
-            <div className="self-start bg-blue-950/70 border border-blue-800/80 text-blue-200 rounded-xl px-4 py-2 text-xs flex items-center justify-between gap-3 w-full max-w-md animate-in fade-in duration-150">
-              <div className="flex items-center gap-2">
-                <Volume2 className="w-3.5 h-3.5 text-blue-400 animate-bounce" />
-                <span className="font-medium">AI Interviewer is speaking...</span>
-                <span className="flex items-center gap-0.5">
-                  <span className="w-1 h-2 bg-blue-400 animate-pulse" />
-                  <span className="w-1 h-3.5 bg-blue-300 animate-pulse delay-75" />
-                  <span className="w-1 h-2.5 bg-blue-400 animate-pulse delay-150" />
-                  <span className="w-1 h-4 bg-blue-300 animate-pulse delay-100" />
-                </span>
-              </div>
-              <button
-                onClick={cancelSpeech}
-                className="px-2 py-1 bg-blue-800/60 hover:bg-blue-700 text-[11px] font-medium rounded-lg text-white transition-colors"
-              >
-                Interrupt AI
-              </button>
-            </div>
-          )}
-
-          {/* Real-time Candidate Speech Transcript */}
-          {liveTranscript && (
-            <div className="self-end bg-blue-600/30 border border-blue-400/40 text-blue-100 max-w-[88%] rounded-xl p-3.5 text-sm shadow-lg shadow-blue-950/40 animate-in fade-in duration-150">
-              <div className="flex items-center justify-between gap-3 mb-1.5 pb-1 border-b border-blue-400/20">
-                <div className="flex items-center gap-1.5 text-xs text-blue-300 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span>Hearing your speech in real-time...</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={commitTranscript}
-                  disabled={isAiThinking}
-                  className="px-2.5 py-1 bg-blue-500 hover:bg-blue-400 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 shadow-sm"
-                >
-                  <Send className="w-3 h-3" />
-                  <span>Send Answer Now</span>
-                </button>
-              </div>
-              <p className="font-normal italic leading-relaxed text-slate-100">"{liveTranscript}"</p>
-              <p className="text-[10px] text-blue-300/80 mt-1.5">Auto-submits when you pause speaking for 1.8s</p>
-            </div>
-          )}
-
-          <div ref={chatBottomRef} />
         </div>
 
-        {/* Supplementary Text Input Form */}
-        <form onSubmit={handleManualSubmit} className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Speak into mic or type your answer here..."
-            value={manualText}
-            onChange={(e) => setManualText(e.target.value)}
-            disabled={isAiThinking}
-            className="flex-1 bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 disabled:opacity-50 transition-colors"
+        {/* Status Indicators */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {candidateInfo?.skills && candidateInfo.skills.length > 0 && (
+            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs">
+              <span className="text-[11px] text-slate-400 font-medium">Domain:</span>
+              <span className="text-[11px] text-blue-300 font-semibold">{candidateInfo.skills.slice(0, 3).join(", ")}</span>
+            </div>
+          )}
+
+          <div
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold border ${
+              connectionStatus === "connected"
+                ? "bg-emerald-950/80 text-emerald-400 border-emerald-800/80 shadow-sm shadow-emerald-950"
+                : "bg-amber-950/80 text-amber-400 border-amber-800/80 animate-pulse"
+            }`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                connectionStatus === "connected" ? "bg-emerald-400" : "bg-amber-400"
+              }`}
+            />
+            <span>{connectionStatus === "connected" ? "HD Voice Connected" : "Connecting Call..."}</span>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Calling Stage: 2-Tile Video/Voice Call Grid */}
+      <main className="w-full max-w-6xl flex-1 flex flex-col justify-center my-4 gap-4">
+        {/* Avatars Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+          {/* Tile 1: AI Senior Technical Interviewer */}
+          <AiCallTile
+            isSpeaking={isAiSpeaking}
+            isThinking={isAiThinking}
+            isVoiceMuted={isAiVoiceMuted}
+            onToggleVoiceMute={toggleAiVoice}
+            onReplaySpeech={handleReplayQuestion}
+            lastAiMessage={lastAiMessage}
           />
-          <button
-            type="submit"
-            disabled={(!manualText.trim() && !liveTranscript.trim()) || isAiThinking}
-            onClick={(e) => {
-              if (!manualText.trim() && liveTranscript.trim()) {
-                e.preventDefault();
-                commitTranscript();
-              }
-            }}
-            className="p-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl transition-all shadow-md shadow-blue-950 flex items-center justify-center"
-            title="Send response"
-          >
-            <Send className="w-4 h-4" />
-          </button>
-        </form>
 
-        {/* Action Controls & Audio Visualizer */}
-        <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-800">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={toggleMuteMic}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-xs transition-colors ${
-                isMuted
-                  ? "bg-amber-600 hover:bg-amber-500 text-white"
-                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-              }`}
-            >
-              {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              <span>{isMuted ? "Unmute Mic" : "Mute Mic"}</span>
-            </button>
-
-            <AudioVisualizer stream={audioStream} isActive={isListening && !isMuted} />
-          </div>
-
-          <button
-            onClick={endInterview}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium text-xs bg-rose-600 hover:bg-rose-500 text-white transition-all shadow-lg shadow-rose-950/50"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>End Interview & Evaluate</span>
-          </button>
+          {/* Tile 2: Candidate (User) */}
+          <UserCallTile
+            candidateName={candidateInfo?.name || "Candidate"}
+            isMuted={isMuted}
+            isListening={isListening}
+            audioStream={audioStream}
+            onToggleMute={toggleMuteMic}
+            turnsCount={candidateTurnsCount}
+            liveTranscript={liveTranscript}
+          />
         </div>
-      </div>
+
+        {/* Real-time Subtitles / Live Captions Strip */}
+        <LiveCaptionsStrip
+          isAiSpeaking={isAiSpeaking}
+          isAiThinking={isAiThinking}
+          isCandidateSpeaking={Boolean(liveTranscript && liveTranscript.trim().length > 0)}
+          currentAiText={lastAiMessage}
+          liveCandidateTranscript={liveTranscript}
+          candidateName={candidateInfo?.name || "You"}
+        />
+      </main>
+
+      {/* Bottom Floating Call Controls Toolbar */}
+      <footer className="w-full max-w-6xl">
+        <CallControlsBar
+          isMuted={isMuted}
+          isAiVoiceMuted={isAiVoiceMuted}
+          onToggleMute={toggleMuteMic}
+          onToggleAiVoice={toggleAiVoice}
+          onReplayQuestion={handleReplayQuestion}
+          onEndCall={endInterview}
+          onToggleChatDrawer={() => setIsChatDrawerOpen(!isChatDrawerOpen)}
+          isChatDrawerOpen={isChatDrawerOpen}
+          liveTranscript={liveTranscript}
+          onManualCommitTranscript={commitTranscript}
+          isAiThinking={isAiThinking}
+        />
+      </footer>
+
+      {/* Fallback In-Call Text Chat Drawer */}
+      <InCallChatDrawer
+        isOpen={isChatDrawerOpen}
+        onClose={() => setIsChatDrawerOpen(false)}
+        messages={messages}
+        manualText={manualText}
+        setManualText={setManualText}
+        onSendMessage={handleManualSubmit}
+        isAiThinking={isAiThinking}
+      />
     </div>
   );
 }
