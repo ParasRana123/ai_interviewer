@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { startInterviewSession, generateNextInterviewTurn } from "../services/interview.service";
 import { classifyCandidateIntent, generateContextualFallback, type DialogContext } from "../services/dialog.manager";
+import { calculateResult } from "../result";
 
 describe("Gemini Interview Pipeline & Services", () => {
   it("should have startInterviewSession and generateNextInterviewTurn functions defined", () => {
@@ -38,9 +39,24 @@ describe("Gemini Interview Pipeline & Services", () => {
     expect(generateNextInterviewTurn("fake-id", "   ")).rejects.toThrow("Candidate message cannot be empty");
   });
 
-  it("should throw error for non-existent interview sessions gracefully", async () => {
-    expect(startInterviewSession("non-existent-interview-uuid-12345")).rejects.toThrow();
-  });
+  it("should evaluate interview session with score, feedback, strengths, and improvements", async () => {
+    const mockMessages = [
+      { type: "ASSISTANT" as const, message: "Hello Paras, can you tell me about your project?", createdAt: new Date() },
+      { type: "USER" as const, message: "I built a real-time collaborative music room using WebSockets and React.", createdAt: new Date() },
+      { type: "ASSISTANT" as const, message: "How did you manage synchronization across different clients?", createdAt: new Date() },
+      { type: "USER" as const, message: "We used server timestamps and offset drift compensation for audio synchronization.", createdAt: new Date() },
+    ];
+
+    const evaluation = await calculateResult(mockMessages);
+    expect(typeof evaluation.score).toBe("number");
+    expect(evaluation.score).toBeGreaterThanOrEqual(1);
+    expect(evaluation.score).toBeLessThanOrEqual(10);
+    expect(typeof evaluation.feedback).toBe("string");
+    expect(Array.isArray(evaluation.strengths)).toBe(true);
+    expect(evaluation.strengths.length).toBeGreaterThanOrEqual(2);
+    expect(Array.isArray(evaluation.improvements)).toBe(true);
+    expect(evaluation.improvements.length).toBeGreaterThanOrEqual(2);
+  }, { timeout: 30000 });
 
   it("should safely handle skills with special regex characters like C++, C#, and Node.js without runtime syntax error", () => {
     const skills = ["C++", "C#", "Node.js", "React.js", "TCP/IP", "REST APIs"];

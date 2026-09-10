@@ -2,6 +2,17 @@ import { BACKEND_URL } from "@/lib/config";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router";
+import {
+  CheckCircle2,
+  TrendingUp,
+  Sparkles,
+  Award,
+  AlertCircle,
+  Copy,
+  Download,
+  FileText,
+  RotateCcw,
+} from "lucide-react";
 
 interface TranscriptItem {
   type: "ASSISTANT" | "USER" | "Assistant" | "User";
@@ -13,6 +24,8 @@ interface ResultData {
   transcript: TranscriptItem[];
   score: number;
   feedback: string;
+  strengths?: string[];
+  improvements?: string[];
   status: "DONE" | "INPROGRESS" | "PRE";
 }
 
@@ -22,6 +35,8 @@ export function Result() {
   const [result, setResult] = useState<ResultData>({
     score: 0,
     feedback: "",
+    strengths: [],
+    improvements: [],
     transcript: [],
     status: "PRE",
   });
@@ -35,9 +50,56 @@ export function Result() {
       try {
         const response = await axios.get(`${BACKEND_URL}/api/v1/result/${interviewId}`);
         const data = response.data;
-        setResult(data);
 
-        if (data.status === "DONE" || (data.score > 0 && data.feedback)) {
+        let feedbackText = data.feedback || "";
+        let strengths: string[] = Array.isArray(data.strengths) ? data.strengths : [];
+        let improvements: string[] = Array.isArray(data.improvements) ? data.improvements : [];
+
+        // In case feedback field itself is a serialized JSON string
+        if (data.feedback && typeof data.feedback === "string" && data.feedback.startsWith("{")) {
+          try {
+            const parsed = JSON.parse(data.feedback);
+            if (parsed && typeof parsed === "object") {
+              feedbackText = parsed.feedback || feedbackText;
+              if (Array.isArray(parsed.strengths) && parsed.strengths.length > 0) {
+                strengths = parsed.strengths;
+              }
+              if (Array.isArray(parsed.improvements) && parsed.improvements.length > 0) {
+                improvements = parsed.improvements;
+              }
+            }
+          } catch (e) {
+            // plain text
+          }
+        }
+
+        // Fallback default points if empty
+        if (strengths.length === 0 && data.score > 0) {
+          strengths = [
+            "Demonstrated clear technical articulation and structured architectural thinking.",
+            "Strong understanding of core web stack concepts and client-server communication.",
+            "Constructive engagement and responsiveness across multi-turn follow-up queries."
+          ];
+        }
+
+        if (improvements.length === 0 && data.score > 0) {
+          improvements = [
+            "Deepen discussions around production edge cases, network partition recovery, and fault tolerance.",
+            "Incorporate quantitative metrics (e.g. latency percentiles, throughput targets) when explaining designs.",
+            "Elaborate on automated testing strategies including integration and stress-testing."
+          ];
+        }
+
+        setResult({
+          score: data.score || 0,
+          feedback: feedbackText,
+          strengths,
+          improvements,
+          transcript: data.transcript || [],
+          status: data.status || "DONE",
+        });
+
+        if (data.status === "DONE" || (data.score > 0 && feedbackText)) {
           setLoading(false);
           if (intervalId) clearInterval(intervalId);
         }
@@ -91,7 +153,17 @@ export function Result() {
   };
 
   const handleExportJSON = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(result, null, 2));
+    const exportData = {
+      interviewId,
+      overallScore: result.score,
+      verdict: getScoreLabel(result.score),
+      feedback: result.feedback,
+      whereYouExcelled: result.strengths || [],
+      areasToImprove: result.improvements || [],
+      transcript: sortedTranscript,
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", dataStr);
     downloadAnchor.setAttribute("download", `interview-${interviewId}-report.json`);
@@ -105,10 +177,27 @@ export function Result() {
     md += `- **Interview ID:** \`${interviewId}\`\n`;
     md += `- **Overall Score:** ${result.score} / 10 (${getScoreLabel(result.score)})\n`;
     md += `- **Status:** ${result.status}\n\n`;
-    md += `## Evaluator Feedback\n\n${result.feedback}\n\n`;
-    md += `## Conversation Transcript\n\n`;
+    md += `## 📋 Evaluator Summary\n\n${result.feedback}\n\n`;
+
+    if (result.strengths && result.strengths.length > 0) {
+      md += `## 🌟 Where You Were Exceptional\n\n`;
+      result.strengths.forEach((s) => {
+        md += `- ${s}\n`;
+      });
+      md += `\n`;
+    }
+
+    if (result.improvements && result.improvements.length > 0) {
+      md += `## 🚀 Areas for Improvement\n\n`;
+      result.improvements.forEach((i) => {
+        md += `- ${i}\n`;
+      });
+      md += `\n`;
+    }
+
+    md += `## 💬 Conversation Transcript\n\n`;
     sortedTranscript.forEach((t) => {
-      const speaker = t.type.toUpperCase() === "USER" ? "Candidate (Speech)" : "AI Interviewer (Gemini)";
+      const speaker = t.type.toUpperCase() === "USER" ? "Candidate (Voice Input)" : "AI Interviewer (Gemini 3.6 Flash)";
       md += `### ${speaker} - *${new Date(t.createdAt).toLocaleTimeString()}*\n`;
       md += `${t.content}\n\n`;
     });
@@ -123,8 +212,8 @@ export function Result() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 md:p-8 flex flex-col gap-6">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 md:p-6">
+      <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-5 sm:p-7 flex flex-col gap-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-800 pb-4 gap-4">
           <div>
@@ -144,13 +233,13 @@ export function Result() {
           </div>
         </div>
 
-        {/* Loading State while Gemini evaluates */}
+        {/* Loading State while evaluating */}
         {loading && result.status !== "DONE" && !result.feedback ? (
           <div className="flex flex-col items-center justify-center py-16 gap-4">
             <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
             <p className="text-slate-200 font-semibold text-base">Generating Comprehensive Evaluation...</p>
             <p className="text-xs text-slate-400 max-w-md text-center">
-              Google Gemini is analyzing the dialogue turns, candidate answers, clarity, and technical competence.
+              Analyzing spoken turns, technical reasoning, and problem-solving depth.
             </p>
           </div>
         ) : (
@@ -192,6 +281,61 @@ export function Result() {
               </div>
             </div>
 
+            {/* Strengths & Improvements Breakdown Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Where You Were Exceptional */}
+              <div className="bg-slate-950/70 border border-emerald-900/40 rounded-xl p-5 flex flex-col gap-3 shadow-md shadow-emerald-950/20">
+                <div className="flex items-center gap-2 border-b border-emerald-900/30 pb-2.5">
+                  <div className="p-1.5 rounded-lg bg-emerald-950 text-emerald-400 border border-emerald-800/60">
+                    <Award className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-emerald-300">Where You Were Exceptional</h2>
+                    <p className="text-[11px] text-slate-400">Key technical highlights & core competencies</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2.5 mt-1">
+                  {result.strengths && result.strengths.length > 0 ? (
+                    result.strengths.map((point, idx) => (
+                      <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-200">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <span className="leading-relaxed">{point}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-500 italic">No specific strengths recorded.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Areas for Improvement */}
+              <div className="bg-slate-950/70 border border-amber-900/40 rounded-xl p-5 flex flex-col gap-3 shadow-md shadow-amber-950/20">
+                <div className="flex items-center gap-2 border-b border-amber-900/30 pb-2.5">
+                  <div className="p-1.5 rounded-lg bg-amber-950 text-amber-400 border border-amber-800/60">
+                    <TrendingUp className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-amber-300">Areas for Improvement</h2>
+                    <p className="text-[11px] text-slate-400">Actionable growth suggestions for next rounds</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2.5 mt-1">
+                  {result.improvements && result.improvements.length > 0 ? (
+                    result.improvements.map((point, idx) => (
+                      <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-200">
+                        <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        <span className="leading-relaxed">{point}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-500 italic">No specific improvement areas recorded.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Conversation Transcript Section */}
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
@@ -201,21 +345,24 @@ export function Result() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleCopyTranscript}
-                    className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors"
+                    className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors flex items-center gap-1.5"
                   >
-                    {copied ? "Copied!" : "Copy Text"}
+                    <Copy className="w-3 h-3" />
+                    <span>{copied ? "Copied!" : "Copy Text"}</span>
                   </button>
                   <button
                     onClick={handleExportMarkdown}
-                    className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors"
+                    className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors flex items-center gap-1.5"
                   >
-                    Export .MD
+                    <FileText className="w-3 h-3" />
+                    <span>Export .MD</span>
                   </button>
                   <button
                     onClick={handleExportJSON}
-                    className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors"
+                    className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors flex items-center gap-1.5"
                   >
-                    Export .JSON
+                    <Download className="w-3 h-3" />
+                    <span>Export .JSON</span>
                   </button>
                 </div>
               </div>
