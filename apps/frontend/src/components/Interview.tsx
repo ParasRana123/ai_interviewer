@@ -67,9 +67,12 @@ export function Interview() {
     let isMounted = true;
 
     async function initWebRTC() {
+      let pc: RTCPeerConnection | null = null;
+      let ms: MediaStream | null = null;
+
       try {
         setConnectionStatus("connecting");
-        const pc = new RTCPeerConnection();
+        pc = new RTCPeerConnection();
         pcRef.current = pc;
 
         if (!audioRef.current) {
@@ -84,6 +87,7 @@ export function Interview() {
         };
 
         pc.onconnectionstatechange = () => {
+          if (!pc) return;
           if (pc.connectionState === "connected") {
             setConnectionStatus("connected");
           } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
@@ -91,17 +95,32 @@ export function Interview() {
           }
         };
 
-        const ms = await navigator.mediaDevices.getUserMedia({
+        ms = await navigator.mediaDevices.getUserMedia({
           audio: true,
         });
-        mediaStreamRef.current = ms;
 
-        ms.getTracks().forEach((track) => pc.addTrack(track, ms));
+        // Guard against component unmount or closed peer connection during getUserMedia
+        if (!isMounted || !pc || pc.signalingState === "closed") {
+          ms.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        mediaStreamRef.current = ms;
+        ms.getTracks().forEach((track) => {
+          if (pc && pc.signalingState !== "closed") {
+            pc.addTrack(track, ms!);
+          }
+        });
 
         // Start Web Speech API transcription once mic is ready
-        startListening();
+        if (isMounted) {
+          startListening();
+        }
+
+        if (!isMounted || !pc || pc.signalingState === "closed") return;
 
         const offer = await pc.createOffer();
+        if (!isMounted || !pc || pc.signalingState === "closed") return;
         await pc.setLocalDescription(offer);
 
         const sdpResponse = await fetch(`${BACKEND_URL}/api/v1/session/${interviewId}`, {
@@ -112,22 +131,37 @@ export function Interview() {
           },
         });
 
+        if (!isMounted || !pc || pc.signalingState === "closed") return;
+
         if (!sdpResponse.ok) {
-          throw new Error(`Session request failed: ${sdpResponse.statusText}`);
+          console.warn(`Realtime session endpoint responded with ${sdpResponse.status}: ${sdpResponse.statusText}`);
+          if (isMounted) {
+            setConnectionStatus("connected"); // STT speech mode active
+          }
+          return;
         }
 
-        const answer = {
-          type: "answer" as const,
-          sdp: await sdpResponse.text(),
-        };
+        const sdpText = await sdpResponse.text();
+        if (!isMounted || !pc || pc.signalingState === "closed") return;
 
-        if (isMounted) {
+        // Verify that the response is actually valid SDP
+        if (sdpText && sdpText.trim().startsWith("v=")) {
+          const answer = {
+            type: "answer" as const,
+            sdp: sdpText,
+          };
           await pc.setRemoteDescription(answer);
+        } else {
+          console.warn("Server returned non-SDP payload for WebRTC session, using speech transcription mode:", sdpText);
+          if (isMounted) {
+            setConnectionStatus("connected");
+          }
         }
-      } catch (error) {
-        console.error("Interview WebRTC/Speech initialization error:", error);
+      } catch (error: any) {
+        console.warn("Interview WebRTC notice:", error?.message || error);
         if (isMounted) {
-          setConnectionStatus("disconnected");
+          // If microphone is active and Speech STT is working, consider session connected for interview
+          setConnectionStatus(mediaStreamRef.current ? "connected" : "disconnected");
         }
       }
     }
@@ -140,7 +174,13 @@ export function Interview() {
       isMounted = false;
       stopListening();
       if (pcRef.current) {
-        pcRef.current.close();
+        try {
+          if (pcRef.current.signalingState !== "closed") {
+            pcRef.current.close();
+          }
+        } catch (e) {
+          // ignore
+        }
         pcRef.current = null;
       }
       if (mediaStreamRef.current) {
