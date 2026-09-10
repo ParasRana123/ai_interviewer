@@ -26,6 +26,7 @@ interface ChatMessage {
   sender: "candidate" | "interviewer";
   text: string;
   timestamp: string;
+  intent?: string;
 }
 
 export function Interview() {
@@ -88,6 +89,7 @@ export function Interview() {
             sender: "interviewer",
             text: reply,
             timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+            intent: response.data?.intent,
           };
           setMessages((prev) => [...prev, aiMsg]);
 
@@ -363,6 +365,16 @@ export function Interview() {
                     <>
                       <Bot className="w-3 h-3 text-blue-400" />
                       <span>AI Technical Interviewer</span>
+                      {msg.intent === "AUDIO_CHECK" && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/70 text-emerald-300 border border-emerald-800/50 font-normal">
+                          Audio Verified
+                        </span>
+                      )}
+                      {msg.intent === "REPEAT_REQUEST" && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-950/70 text-blue-300 border border-blue-800/50 font-normal">
+                          Clarification
+                        </span>
+                      )}
                     </>
                   )}
                 </div>
