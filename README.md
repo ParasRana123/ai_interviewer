@@ -6,7 +6,7 @@ An intelligent, real-time AI technical interviewer platform that parses candidat
 
 ## 🌟 Key Features
 
-- **Resume Parsing & Profile Enrichment**: Automatically parses candidate PDF resumes and pulls live stats from GitHub, LeetCode, and Codeforces profiles using Gemini 2.5 Flash.
+- **Resume Parsing & Profile Enrichment**: Automatically parses candidate PDF resumes and pulls live stats from GitHub, LeetCode, and Codeforces profiles using Gemini 3.6 Flash.
 - **Real-Time Voice Technical Interview**: Conducts conversational interviews using OpenAI Realtime Voice via WebRTC.
 - **100% Free Speech-to-Text (STT)**: Uses the browser-native **Web Speech API** (`SpeechRecognition` / `webkitSpeechRecognition`) for real-time candidate speech transcription:
   - **Zero Cost**: Completely free with unlimited usage.
