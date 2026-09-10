@@ -18,53 +18,63 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
       if (!req.file) {
         return res.status(400).json({
           success: false,
-          error: "No resume file uploaded",
+          error: "No resume file uploaded. Please select a PDF file.",
+          message: "No resume file uploaded. Please select a PDF file.",
         });
       }
+
       const resumeText = await extractText(req.file.buffer);
+      if (!resumeText || resumeText.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Unable to extract text from the uploaded PDF. Please upload a standard text-based PDF resume.",
+          message: "Unable to extract text from the uploaded PDF. Please upload a standard text-based PDF resume.",
+        });
+      }
+
       const parsedResume = await parseResume(resumeText);
       const profiles = extractProfiles(resumeText);
-      const enrichedResume: any = {...parsedResume , githubStats: null , leetcodeStats: null , codeforcesStats: null};
+      const enrichedResume: any = {
+        ...parsedResume,
+        githubStats: null,
+        leetcodeStats: null,
+        codeforcesStats: null
+      };
+
       if (profiles.github) {
         try {
-          enrichedResume.githubStats =
-            await getGithuStats(
-              profiles.github
-            );
+          enrichedResume.githubStats = await getGithuStats(profiles.github);
         } catch (error) {
-          console.error("GitHub Stats Error:",error);
+          console.warn("GitHub Stats Warning:", error);
         }
       }
       if (profiles.leetcode) {
         try {
           enrichedResume.leetcodeStats = await getLeetcodeStats(profiles.leetcode);
         } catch (error) {
-          console.error("LeetCode Stats Error:",error);
+          console.warn("LeetCode Stats Warning:", error);
         }
       }
       if (profiles.codeforces) {
         try {
           enrichedResume.codeforcesStats = await getCodeforcesStats(profiles.codeforces);
         } catch (error) {
-          console.error(
-            "Codeforces Stats Error:",
-            error
-          );
+          console.warn("Codeforces Stats Warning:", error);
         }
       }
 
       const interview = await prisma.interview.create({
         data: {
-          name: enrichedResume.name,
-          email: enrichedResume.email,
-          phone: enrichedResume.phone,
-          education: enrichedResume.education,
-          experience: enrichedResume.experience,
-          projects: enrichedResume.projects,
-          skills: enrichedResume.skills,
-          achievements: enrichedResume.achievements,
+          name: enrichedResume.name || "Candidate",
+          email: enrichedResume.email || null,
+          phone: enrichedResume.phone || null,
+          education: enrichedResume.education || [],
+          experience: enrichedResume.experience || [],
+          projects: enrichedResume.projects || [],
+          skills: enrichedResume.skills || [],
+          achievements: enrichedResume.achievements || [],
           codingProfiles: {
-            ...enrichedResume.codingProfiles,
+            ...(enrichedResume.codingProfiles || {}),
             githubStats: enrichedResume.githubStats,
             leetcodeStats: enrichedResume.leetcodeStats,
             codeforcesStats: enrichedResume.codeforcesStats
@@ -72,7 +82,7 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
           status: "PRE",
           score: 0,
         }
-      })
+      });
 
       return res.status(200).json({
         success: true,
@@ -81,15 +91,11 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
       });
       
     } catch (error: any) {
-      console.error(
-        "Resume Parsing Error:",
-        error
-      );
+      console.error("Resume Processing Error:", error);
       return res.status(500).json({
         success: false,
-        message:
-          error?.message ||
-          "Failed to parse resume",
+        error: error?.message || "Failed to process resume",
+        message: error?.message || "Failed to process resume",
       });
     }
   }
