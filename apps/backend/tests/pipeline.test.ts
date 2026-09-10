@@ -1,10 +1,37 @@
 import { describe, it, expect } from "bun:test";
 import { startInterviewSession, generateNextInterviewTurn } from "../services/interview.service";
+import { classifyCandidateIntent, generateContextualFallback, type DialogContext } from "../services/dialog.manager";
 
 describe("Gemini Interview Pipeline & Services", () => {
   it("should have startInterviewSession and generateNextInterviewTurn functions defined", () => {
     expect(typeof startInterviewSession).toBe("function");
     expect(typeof generateNextInterviewTurn).toBe("function");
+  });
+
+  it("should accurately classify candidate intent for audio checks, greetings, and technical replies", () => {
+    expect(classifyCandidateIntent("hello hello hello can you listen")).toBe("AUDIO_CHECK");
+    expect(classifyCandidateIntent("tell me are you able to listen to me")).toBe("AUDIO_CHECK");
+    expect(classifyCandidateIntent("is my microphone working")).toBe("AUDIO_CHECK");
+    expect(classifyCandidateIntent("can you repeat the question please")).toBe("REPEAT_REQUEST");
+    expect(classifyCandidateIntent("hello")).toBe("GREETING");
+    expect(classifyCandidateIntent("In my previous role at TechCorp, I built a Redis caching layer to handle 50k QPS.")).toBe("TECHNICAL_EXPLANATION");
+  });
+
+  it("should generate dynamic audio check acknowledgement with candidate context instead of repetitive technical text", () => {
+    const mockContext: DialogContext = {
+      candidateName: "Paras Rana",
+      skills: ["React", "Node.js", "PostgreSQL"],
+      projects: [{ title: "Mercor Interviewer", description: "AI technical platform" }],
+      experience: [],
+      history: [
+        { type: "ASSISTANT", message: "Hello Paras, tell me about a recent project you built?" }
+      ],
+    };
+
+    const response = generateContextualFallback(mockContext, "hello hello can you listen");
+    expect(response).toContain("Paras");
+    expect(response.toLowerCase()).toContain("hear you");
+    expect(response).not.toBe("Thank you for explaining that. Could you dive deeper into the key technical challenges you faced during that implementation and how you resolved them?");
   });
 
   it("should reject empty candidate messages in generateNextInterviewTurn", async () => {
@@ -42,4 +69,5 @@ describe("Gemini Interview Pipeline & Services", () => {
     expect(cleanedText).not.toContain("`");
   });
 });
+
 
