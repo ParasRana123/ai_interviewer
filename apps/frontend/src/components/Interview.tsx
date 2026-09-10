@@ -2,6 +2,7 @@ import { useParams, useNavigate } from "react-router";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { BACKEND_URL } from "@/lib/config";
 import { useSpeechRecognition } from "@/lib/useSpeechRecognition";
+import { AudioVisualizer } from "@/components/AudioVisualizer";
 import axios from "axios";
 
 interface ChatMessage {
@@ -267,18 +268,22 @@ export function Interview() {
           )}
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-          <button
-            onClick={toggleMute}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-              isMuted
-                ? "bg-amber-600 hover:bg-amber-500 text-white"
-                : "bg-slate-800 hover:bg-slate-700 text-slate-200"
-            }`}
-          >
-            {isMuted ? "Unmute Microphone" : "Mute Microphone"}
-          </button>
+        {/* Action Controls & Live Audio Visualizer */}
+        <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-800">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleMute}
+              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                isMuted
+                  ? "bg-amber-600 hover:bg-amber-500 text-white"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-200"
+              }`}
+            >
+              {isMuted ? "Unmute Microphone" : "Mute Microphone"}
+            </button>
+
+            <AudioVisualizer stream={mediaStreamRef.current} isActive={isListening && !isMuted} />
+          </div>
 
           <button
             onClick={endInterview}
