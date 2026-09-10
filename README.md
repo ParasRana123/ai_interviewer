@@ -1,19 +1,26 @@
-# AI Interviewer 🎙️🤖
+# AI Technical Interviewer 🎙️🤖
 
-An intelligent, real-time AI technical interviewer platform that parses candidate resumes, extracts GitHub/LeetCode/Codeforces competitive programming metrics, conducts interactive spoken interviews using WebRTC, and evaluates candidate performance with detailed scoring and constructive feedback.
+An intelligent, real-time AI technical interviewer platform that parses candidate resumes, extracts GitHub/LeetCode/Codeforces competitive programming metrics, conducts interactive spoken interviews using **Google Gemini 3.6 Flash** + **Browser Web Speech APIs**, and evaluates candidate performance with detailed scoring and constructive feedback.
 
 ---
 
 ## 🌟 Key Features
 
+- **100% Free & Zero-Cost Architecture**: Built completely without paid OpenAI API keys or paid speech services. Only requires a free Google Gemini API key!
 - **Resume Parsing & Profile Enrichment**: Automatically parses candidate PDF resumes and pulls live stats from GitHub, LeetCode, and Codeforces profiles using Gemini 3.6 Flash.
-- **Real-Time Voice Technical Interview**: Conducts conversational interviews using OpenAI Realtime Voice via WebRTC.
-- **100% Free Speech-to-Text (STT)**: Uses the browser-native **Web Speech API** (`SpeechRecognition` / `webkitSpeechRecognition`) for real-time candidate speech transcription:
-  - **Zero Cost**: Completely free with unlimited usage.
-  - **No API Key Required**: No Deepgram API key, billing, or external token provisioning needed.
-  - **Zero Server Latency**: Continuous streaming speech recognition in the client.
-- **Live Audio Visualizer**: Real-time microphone audio frequency visualizer powered by Web Audio API.
-- **Automated Performance Evaluation**: Automatically scores the candidate out of 10 and delivers comprehensive feedback based on full interview transcripts.
+- **Dynamic Gemini Conversational Interviewer**: Conducts personalized multi-turn technical interviews. Gemini generates tailored questions probing resume projects, system design, and algorithmic problem-solving in real-time.
+- **Free Spoken Interactivity (STT & TTS)**:
+  - **Speech-to-Text (STT)**: Browser-native **Web Speech API** (`SpeechRecognition` / `webkitSpeechRecognition`) for real-time speech transcription with zero latency.
+  - **Text-to-Speech (TTS)**: Browser-native **Speech Synthesis API** (`speechSynthesis`) with automatic natural voice selection and continuous speech queue management.
+- **Intelligent Turn-Taking State Machine**: Automatically pauses microphone listening while the AI speaks to prevent audio feedback/echo loops and resumes listening seamlessly.
+- **Live Candidate Profile & Audio Wave Visualizer**:
+  - Real-time microphone audio frequency visualizer powered by Web Audio API.
+  - Dynamic AI voice speech wave animation.
+  - Live candidate profile sidebar displaying extracted skills, repositories, and competitive programming ratings.
+  - Interactive interview controls: Mute/Unmute microphone, Interrupt/Pause AI speaking, and Replay current question.
+- **Automated Performance Evaluation & Export**:
+  - Automatically evaluates candidate answers out of 10 with constructive feedback.
+  - Export complete interview reports and conversation transcripts as **Markdown (`.md`)** or **JSON (`.json`)**, or copy to clipboard with one click.
 
 ---
 
@@ -22,8 +29,8 @@ An intelligent, real-time AI technical interviewer platform that parses candidat
 ```
 AI Interviewer Monorepo (Bun + Turbo)
 ├── apps/
-│   ├── frontend/        # React 19, TailwindCSS, Web Speech API, WebRTC
-│   └── backend/         # Express 5, Prisma ORM, OpenAI Realtime, Google Gemini
+│   ├── frontend/        # React 19, TailwindCSS, Web Speech STT & TTS, Web Audio API
+│   └── backend/         # Express 5, Prisma ORM, Google Gemini 3.6 Flash, PostgreSQL
 └── packages/
     ├── ui/              # Shared UI components
     ├── typescript-config# Shared TypeScript configurations
@@ -38,13 +45,12 @@ AI Interviewer Monorepo (Bun + Turbo)
 
 | Variable | Description | Free Tier Available? |
 | :--- | :--- | :--- |
-| `GEMINI_API_KEY` | Used for PDF resume parsing and interview performance evaluation | Yes (Google AI Studio free tier) |
-| `OPENAI_API_KEY` | Used for OpenAI Realtime Voice (`gpt-realtime-2`) WebRTC audio session | Requires OpenAI account |
-| `DATABASE_URL` | PostgreSQL database connection string for Prisma | Yes (e.g. Supabase / Neon / Local Postgres) |
+| `GEMINI_API_KEY` | Powers resume extraction, conversational interview turn generation, and final candidate evaluation | **Yes** (100% Free via [Google AI Studio](https://aistudio.google.com/)) |
+| `DATABASE_URL` | PostgreSQL database connection string for Prisma ORM | **Yes** (e.g. Supabase / Neon / Local Postgres) |
 
 > [!NOTE]
-> **Deepgram API Key is NOT required!**
-> The application uses the browser's built-in **Web Speech API**, eliminating any need for Deepgram or other paid speech-to-text API keys.
+> **No OpenAI or Deepgram API Keys Required!**
+> This project operates 100% on Google's free Gemini API combined with browser-native Web Speech APIs.
 
 ---
 
@@ -59,8 +65,7 @@ bun install
 ### 2. Configure Backend Environment
 Create `apps/backend/.env`:
 ```env
-GEMINI_API_KEY=your_gemini_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here
+GEMINI_API_KEY="your_google_gemini_api_key_here"
 DATABASE_URL="postgresql://user:password@localhost:5432/interview_db?schema=public"
 ```
 
@@ -78,5 +83,5 @@ Start both backend and frontend concurrently:
 bun dev
 ```
 
-- **Frontend**: `http://localhost:3000` (or `http://localhost:3001` depending on port config)
-- **Backend**: `http://localhost:3001`
+- **Frontend**: `http://localhost:3000` (or Vite assigned port)
+- **Backend API**: `http://localhost:3001`
