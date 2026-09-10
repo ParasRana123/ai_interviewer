@@ -77,6 +77,7 @@ export function Form() {
           headers: {
             "Content-Type": "multipart/form-data",
           },
+          timeout: 45000,
         }
       );
 
@@ -89,11 +90,16 @@ export function Form() {
       }
     } catch (error: any) {
       console.error("Resume upload error:", error);
-      const serverMessage =
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        error.message ||
-        "Failed to upload and parse resume.";
+      let serverMessage = "Failed to upload and parse resume.";
+      if (error.response?.data?.message) {
+        serverMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        serverMessage = error.response.data.error;
+      } else if (error.code === "ECONNABORTED") {
+        serverMessage = "Request timed out. Please check your network or try again.";
+      } else if (error.message) {
+        serverMessage = error.message;
+      }
       toast.error(serverMessage);
     } finally {
       setLoading(false);
