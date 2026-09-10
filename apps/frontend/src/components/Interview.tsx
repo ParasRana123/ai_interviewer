@@ -113,6 +113,21 @@ export function Interview() {
     onFinalTranscript: sendCandidateAnswer,
   });
 
+  // Turn-taking coordination: Pause STT when AI is speaking to prevent speaker echo feedback
+  useEffect(() => {
+    if (isAiSpeaking) {
+      stopListening();
+    } else if (!isMuted && isInitialized && connectionStatus === "connected") {
+      // Add a slight delay after speech finishes before unmuting mic to avoid tail audio echo
+      const timer = setTimeout(() => {
+        if (!isMuted && !isAiSpeaking) {
+          startListening();
+        }
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [isAiSpeaking, isMuted, isInitialized, connectionStatus, startListening, stopListening]);
+
   // Auto-scroll transcript container
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
