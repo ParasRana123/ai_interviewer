@@ -126,17 +126,33 @@ router.post("/session/:interviewId" , async (req , res) => {
   }
 })
 
-router.post("/session1/:interviewId" , async (req , res) => {
-  const { message } = req.body;
-  await prisma.message.create({
-    data: {
-      interviewId: req.params.interviewId,
-      type: "USER",
-      message: message
+router.post("/session1/:interviewId", async (req, res) => {
+  try {
+    const { interviewId } = req.params;
+    const { message } = req.body;
+
+    if (!interviewId) {
+      return res.status(400).json({ error: "Missing interviewId parameter" });
     }
-  });
-  res.json({ message: "Message saved" });
-})
+
+    if (!message || typeof message !== "string" || !message.trim()) {
+      return res.status(400).json({ error: "Message content cannot be empty" });
+    }
+
+    const savedMessage = await prisma.message.create({
+      data: {
+        interviewId,
+        type: "USER",
+        message: message.trim(),
+      },
+    });
+
+    return res.status(200).json({ success: true, message: "User transcript saved", id: savedMessage.id });
+  } catch (error: any) {
+    console.error("Error saving user transcript message:", error);
+    return res.status(500).json({ error: "Failed to save message" });
+  }
+});
 
 router.get("/result/:interviewId" , async (req , res) => {
   const interview = await prisma.interview.findFirst({
