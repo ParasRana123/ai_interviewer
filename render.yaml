@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: ai-interviewer-backend
+    env: node
+    plan: free
+    region: oregon
+    buildCommand: bun install && cd apps/backend && bun x prisma generate
+    startCommand: cd apps/backend && bun run index.ts
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGIN
+        value: "*"

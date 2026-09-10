@@ -91,5 +91,17 @@ Start both backend and frontend concurrently:
 bun dev
 ```
 
+---
+
+## 🌐 Production Deployment (Vercel & Render)
+
+This project is configured for 1-click cloud deployment:
+- **Frontend**: Deploy on **Vercel** (`apps/frontend`, build: `bun run build.ts`, output: `dist`).
+- **Backend**: Deploy on **Render** (Web Service or Dockerfile, start: `bun run index.ts`).
+- **Database**: Cloud PostgreSQL on **Neon** or **Supabase**.
+
+📖 **See the complete step-by-step guide in [DEPLOYMENT.md](DEPLOYMENT.md).**
+
+
 - **Frontend**: `http://localhost:3000` (or Vite assigned port)
 - **Backend API**: `http://localhost:3001`
