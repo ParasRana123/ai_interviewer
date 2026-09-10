@@ -1,5 +1,10 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "../prisma/db";
+import {
+  classifyCandidateIntent,
+  generateContextualFallback,
+  type DialogContext,
+} from "./dialog.manager";
 
 function getGenerativeModel() {
   const apiKey = process.env.GEMINI_API_KEY || "";
@@ -10,6 +15,36 @@ function getGenerativeModel() {
   return genai.getGenerativeModel({
     model: "gemini-3.6-flash",
   });
+}
+
+/**
+ * Executes a Gemini model call with exponential backoff retry for 429 rate limits
+ */
+async function generateWithRetry(prompt: string, maxRetries = 2): Promise<string | null> {
+  let attempt = 0;
+  while (attempt <= maxRetries) {
+    try {
+      const model = getGenerativeModel();
+      const result = await model.generateContent(prompt);
+      const text = result.response.text()?.trim();
+      if (text) {
+        return text.replace(/[*#_`]/g, "").trim();
+      }
+      return null;
+    } catch (err: any) {
+      attempt++;
+      const isRateLimit = err?.message?.includes("429") || err?.status === 429 || err?.message?.includes("Quota exceeded");
+      if (isRateLimit && attempt <= maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+        console.warn(`Gemini rate limit 429 encountered, retrying attempt ${attempt}/${maxRetries} in ${Math.round(delay)}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      console.warn("Gemini generation notice:", err?.message || err);
+      break;
+    }
+  }
+  return null;
 }
 
 /**
@@ -67,15 +102,9 @@ Respond in clean plain text with no markdown formatting.
 
   let openingGreeting = `Hello ${candidateName}, welcome to your technical interview! I have reviewed your background with ${skillsList}. To get started, could you briefly introduce yourself and tell me about a recent project you built?`;
 
-  try {
-    const model = getGenerativeModel();
-    const result = await model.generateContent(prompt);
-    const text = result.response.text()?.trim();
-    if (text) {
-      openingGreeting = text.replace(/[*#_`]/g, "").trim();
-    }
-  } catch (err: any) {
-    console.warn("Gemini start session notice, using fallback opening:", err?.message || err);
+  const generatedText = await generateWithRetry(prompt, 1);
+  if (generatedText) {
+    openingGreeting = generatedText;
   }
 
   const savedMessage = await prisma.message.create({
@@ -135,10 +164,41 @@ export async function generateNextInterviewTurn(interviewId: string, userMessage
   }
 
   const candidateName = interview.name || "Candidate";
-  const skillsList = Array.isArray(interview.skills) ? (interview.skills as string[]).join(", ") : "Software Engineering";
-  const projectsSummary = Array.isArray(interview.projects)
-    ? JSON.stringify(interview.projects, null, 2)
-    : "General projects";
+  const skillsList = Array.isArray(interview.skills) ? (interview.skills as string[]) : [];
+  const projectsList = Array.isArray(interview.projects) ? (interview.projects as any[]) : [];
+  const experienceList = Array.isArray(interview.experience) ? (interview.experience as any[]) : [];
+
+  const dialogContext: DialogContext = {
+    candidateName,
+    skills: skillsList,
+    projects: projectsList,
+    experience: experienceList,
+    history: interview.conversations.map((c) => ({
+      type: c.type as "ASSISTANT" | "USER",
+      message: c.message,
+    })),
+  };
+
+  const intent = classifyCandidateIntent(cleanUserMessage);
+
+  // If the candidate is performing an audio/connection check or asking to repeat, respond immediately with context
+  if (intent === "AUDIO_CHECK" || intent === "REPEAT_REQUEST") {
+    const directResponse = generateContextualFallback(dialogContext, cleanUserMessage);
+    const savedAssistantMessage = await prisma.message.create({
+      data: {
+        interviewId,
+        type: "ASSISTANT",
+        message: directResponse,
+      },
+    });
+
+    return {
+      success: true,
+      reply: savedAssistantMessage.message,
+      id: savedAssistantMessage.id,
+      intent,
+    };
+  }
 
   // Build dialog history representation
   const dialogHistory = interview.conversations
@@ -146,37 +206,33 @@ export async function generateNextInterviewTurn(interviewId: string, userMessage
     .join("\n");
 
   const prompt = `
-You are an expert Senior Technical Interviewer conducting a real-time, interactive technical interview.
+You are an expert Senior Technical Interviewer conducting a live, interactive technical interview.
 
 Candidate Name: ${candidateName}
-Candidate Skills: ${skillsList}
-Candidate Projects: ${projectsSummary}
+Candidate Skills: ${skillsList.join(", ") || "Software Development"}
+Candidate Projects: ${JSON.stringify(projectsList, null, 2)}
+Candidate Latest Input Intent: ${intent}
 
 CONVERSATION TRANSCRIPT SO FAR:
 ${dialogHistory}
 
-INTERVIEWER GUIDELINES:
-1. Act naturally like a friendly, rigorous senior engineer evaluating a peer.
-2. Acknowledge what the candidate just explained briefly (1 sentence).
-3. Follow up on specific technical details, architecture decisions, trade-offs, edge cases, or problem-solving approaches.
-4. Keep your response CONCISE (2 to 4 sentences maximum) so that it sounds natural when spoken out loud by text-to-speech.
-5. End with ONE clear, focused question.
-6. Do NOT repeat questions already asked.
-7. If the candidate asks for clarification or indicates they are done, guide them forward smoothly.
-8. Output ONLY the interviewer's direct spoken response in clean plain text with no markdown symbols.
+CRITICAL INTERVIEWER INSTRUCTIONS:
+1. Act naturally like a friendly, rigorous senior technical lead evaluating a peer.
+2. Directly acknowledge what the candidate just said in their last message ("${cleanUserMessage}").
+3. DO NOT use canned or repetitive phrases (like "Thank you for explaining that").
+4. Never repeat a question or topic that has already been asked earlier in the transcript.
+5. If the candidate answered a technical question, probe deeper into their specific implementation, edge cases, trade-offs, concurrency, or database choices.
+6. If the candidate gave a short or conversational answer, guide them smoothly toward explaining a specific project or technical system.
+7. Keep your response CONCISE (2 to 4 sentences maximum) so that it is engaging and natural when spoken aloud via text-to-speech.
+8. End with ONE clear, focused question.
+9. Output ONLY your direct spoken words in clean plain text with no markdown formatting.
 `;
 
-  let nextResponse = "Thank you for explaining that. Could you dive deeper into the key technical challenges you faced during that implementation and how you resolved them?";
+  let nextResponse: string | null = await generateWithRetry(prompt, 2);
 
-  try {
-    const model = getGenerativeModel();
-    const result = await model.generateContent(prompt);
-    const text = result.response.text()?.trim();
-    if (text) {
-      nextResponse = text.replace(/[*#_`]/g, "").trim();
-    }
-  } catch (err: any) {
-    console.warn("Gemini conversation turn notice, using fallback response:", err?.message || err);
+  if (!nextResponse) {
+    // Dynamic non-repeating contextual fallback
+    nextResponse = generateContextualFallback(dialogContext, cleanUserMessage);
   }
 
   const savedAssistantMessage = await prisma.message.create({
@@ -191,5 +247,7 @@ INTERVIEWER GUIDELINES:
     success: true,
     reply: savedAssistantMessage.message,
     id: savedAssistantMessage.id,
+    intent,
   };
 }
+
