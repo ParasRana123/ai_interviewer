@@ -8,7 +8,12 @@ An intelligent, real-time AI technical interviewer platform that parses candidat
 
 - **100% Free & Zero-Cost Architecture**: Built completely without paid OpenAI API keys or paid speech services. Only requires a free Google Gemini API key!
 - **Resume Parsing & Profile Enrichment**: Automatically parses candidate PDF resumes and pulls live stats from GitHub, LeetCode, and Codeforces profiles using Gemini 3.6 Flash.
-- **Dynamic Gemini Conversational Interviewer**: Conducts personalized multi-turn technical interviews. Gemini generates tailored questions probing resume projects, system design, and algorithmic problem-solving in real-time.
+- **Dynamic Gemini & Adaptive NLU Conversational Engine**:
+  - Conducts personalized multi-turn technical interviews probing resume projects, system design, and algorithmic problem-solving.
+  - **Intent & Correction Understanding**: Automatically distinguishes between microphone/audio checks (*"can you hear me"*), question repeat requests, technical answers, and candidate corrections (*"no actually, there was no data validation, it was a collaborative music room"*).
+  - **Semantic Concept Extraction**: Dynamically identifies key technical domains in candidate speech (real-time sync, WebSockets, music rooms, database design, caching, search debouncing, API scaling) and asks deeply relevant technical questions.
+  - **100% Anti-Repetition Guarantee**: Tracks conversational history across the entire session to ensure no question, phrasing, or topic is ever repeated.
+  - **Quota Resilience & Graceful Fallback**: Gracefully transitions to the local Adaptive NLU Dialogue Engine if external Gemini API limits are reached, ensuring zero downtime and instant speech response times.
 - **Free Spoken Interactivity (STT & TTS)**:
   - **Speech-to-Text (STT)**: Browser-native **Web Speech API** (`SpeechRecognition` / `webkitSpeechRecognition`) for real-time speech transcription with zero latency.
   - **Text-to-Speech (TTS)**: Browser-native **Speech Synthesis API** (`speechSynthesis`) with automatic natural voice selection and continuous speech queue management.
