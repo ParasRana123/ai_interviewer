@@ -51,8 +51,8 @@ const corsOptions: cors.CorsOptions = {
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
 };
 
+// Enable CORS for all routes (automatically handles OPTIONS preflight across Express 5)
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
@@ -80,7 +80,22 @@ app.get("/health", (_req, res) => {
 // API Routes
 app.use("/api/v1", resumeRouter);
 
-// Port binding for Render / Cloud deployments
+// Express 5 compatible 404 handler (without invalid wildcard strings)
+app.use((_req, res) => {
+  res.status(404).json({
+    success: false,
+    error: "Endpoint not found",
+  });
+});
+
+// Global error handler
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("Unhandled backend error:", err);
+  res.status(500).json({
+    success: false,
+    error: err?.message || "Internal server error",
+  });
+});
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 const HOST = "0.0.0.0";
 
