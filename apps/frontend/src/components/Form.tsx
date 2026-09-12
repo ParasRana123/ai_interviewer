@@ -18,6 +18,7 @@ import {
 import { Button } from "./ui/button";
 import { BACKEND_URL, getBackendUrl } from "@/lib/config";
 import { BackendSettingsModal } from "./BackendSettingsModal";
+import { AlertCircle } from "lucide-react";
 
 export function Form() {
   const [resume, setResume] = useState<File | null>(null);
@@ -25,24 +26,35 @@ export function Form() {
   const [loadingStatus, setLoadingStatus] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<"checking" | "online" | "not-found" | "offline">("checking");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   const currentBackendUrl = getBackendUrl();
 
-  // Proactive background ping on mount to wake up Render free-tier backend
+  // Proactive background ping on mount to wake up Render free-tier backend and test reachability
   useEffect(() => {
     let isMounted = true;
     axios
       .get(`${currentBackendUrl}/health`, { timeout: 15000 })
       .then((res) => {
-        if (isMounted && (res.data?.status === "healthy" || res.status === 200)) {
-          console.log("AI Interviewer Backend is online and responsive.");
+        if (isMounted) {
+          if (res.data?.status === "healthy" || res.status === 200) {
+            setBackendStatus("online");
+            console.log("AI Interviewer Backend is online and responsive.");
+          }
         }
       })
       .catch((err) => {
-        // Silent catch: Free-tier instance might be spinning up
-        console.info("Proactive health check ping dispatched to backend.");
+        if (isMounted) {
+          if (err.response?.status === 404) {
+            setBackendStatus("not-found");
+            console.warn("Backend returned 404 Not Found. Service URL may differ.");
+          } else {
+            setBackendStatus("offline");
+            console.info("Proactive health check dispatched (free-tier instance may be spinning up).");
+          }
+        }
       });
 
     return () => {
@@ -167,7 +179,10 @@ export function Form() {
     // Final error handling if all retries exhausted
     let serverMessage = "Failed to connect to backend server. Please try again.";
     if (lastError?.response?.status === 404) {
-      serverMessage = `Backend returned 404 Not Found at ${currentBackendUrl}. If your Render backend has a custom subdomain, click "Configure Backend" in the top bar.`;
+      setBackendStatus("not-found");
+      serverMessage = `Backend service not found (404) at ${currentBackendUrl}. Please enter your exact Render Web Service URL in settings.`;
+      // Open settings modal automatically to assist the user
+      setTimeout(() => setIsSettingsOpen(true), 400);
     } else if (lastError?.response?.data?.message) {
       serverMessage = lastError.response.data.message;
     } else if (lastError?.response?.data?.error) {
@@ -197,12 +212,18 @@ export function Form() {
       <div className="absolute top-4 right-4 sm:top-6 sm:right-6">
         <button
           onClick={() => setIsSettingsOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-card/80 hover:bg-card border border-border shadow-sm text-muted-foreground hover:text-foreground transition-all"
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border shadow-sm transition-all ${
+            backendStatus === "not-found"
+              ? "bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20"
+              : "bg-card/80 hover:bg-card border-border text-muted-foreground hover:text-foreground"
+          }`}
           title="Configure backend target URL"
         >
-          <Server className="w-3.5 h-3.5 text-blue-500" />
-          <span className="hidden sm:inline">Backend API</span>
-          <Settings className="w-3 h-3 text-muted-foreground ml-0.5" />
+          <Server className={`w-3.5 h-3.5 ${backendStatus === "not-found" ? "text-amber-400 animate-pulse" : "text-blue-500"}`} />
+          <span className="hidden sm:inline">
+            {backendStatus === "not-found" ? "Configure Render URL" : "Backend API"}
+          </span>
+          <Settings className="w-3 h-3 ml-0.5 opacity-70" />
         </button>
       </div>
 
@@ -225,6 +246,26 @@ export function Form() {
             Upload your resume to start an intelligent, conversational voice interview tailored to your skills.
           </p>
         </div>
+
+        {/* 404 Notice Banner */}
+        {backendStatus === "not-found" && (
+          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-xs flex items-center justify-between gap-3 shadow-md animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="leading-snug">
+                Backend 404 at <span className="font-mono text-amber-300 font-semibold">{currentBackendUrl}</span>
+              </span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsSettingsOpen(true)}
+              className="h-7 text-[11px] border-amber-500/40 text-amber-300 hover:bg-amber-500/20 shrink-0 font-medium"
+            >
+              Set Render URL
+            </Button>
+          </div>
+        )}
 
         {/* Upload Card */}
         <div className="bg-card border rounded-2xl p-6 sm:p-8 shadow-xl space-y-6 transition-all">

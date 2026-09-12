@@ -148,12 +148,19 @@ export function BackendSettingsModal({
               setInputUrl(e.target.value);
               setTestResult(null);
             }}
-            placeholder="https://ai-interviewer-backend.onrender.com"
+            placeholder="https://your-service-name.onrender.com"
             className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
           />
-          <p className="text-[11px] text-slate-400">
-            Render assigns free URLs like <span className="text-slate-300 font-mono">https://ai-interviewer-backend.onrender.com</span>. If your instance has a custom name or slug, paste it above.
-          </p>
+
+          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-[11px] text-slate-400 space-y-1.5">
+            <p className="font-semibold text-slate-300">How to find your Render URL:</p>
+            <ol className="list-decimal list-inside space-y-1 text-slate-400">
+              <li>Open your <a href="https://dashboard.render.com" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">Render Dashboard</a>.</li>
+              <li>Click on your deployed backend web service.</li>
+              <li>Copy the URL under the service title (e.g. <span className="text-blue-300 font-mono">https://ai-interviewer-backend-xxxx.onrender.com</span>).</li>
+              <li>Paste it into the field above and click <strong>Test Health</strong>.</li>
+            </ol>
+          </div>
         </div>
 
         {/* Connection Test Box */}
