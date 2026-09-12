@@ -135,19 +135,19 @@ const result = await Bun.build({
       process.env.VITE_BACKEND_URL ||
       process.env.REACT_APP_BACKEND_URL ||
       process.env.BACKEND_URL ||
-      "https://ai-interviewer-backend.onrender.com"
+      "https://ai-interviewer-backend-xezj.onrender.com"
     ),
     "process.env.REACT_APP_BACKEND_URL": JSON.stringify(
       process.env.VITE_BACKEND_URL ||
       process.env.REACT_APP_BACKEND_URL ||
       process.env.BACKEND_URL ||
-      "https://ai-interviewer-backend.onrender.com"
+      "https://ai-interviewer-backend-xezj.onrender.com"
     ),
     "process.env.BACKEND_URL": JSON.stringify(
       process.env.VITE_BACKEND_URL ||
       process.env.REACT_APP_BACKEND_URL ||
       process.env.BACKEND_URL ||
-      "https://ai-interviewer-backend.onrender.com"
+      "https://ai-interviewer-backend-xezj.onrender.com"
     ),
   },
   ...cliConfig,

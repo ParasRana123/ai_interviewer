@@ -1,6 +1,6 @@
 declare const process: any;
 
-export const DEFAULT_PRODUCTION_BACKEND_URL = "https://ai-interviewer-backend.onrender.com";
+export const DEFAULT_PRODUCTION_BACKEND_URL = "https://ai-interviewer-backend-xezj.onrender.com";
 export const DEFAULT_LOCAL_BACKEND_URL = "http://localhost:3001";
 export const STORAGE_KEY_BACKEND_URL = "AI_INTERVIEWER_BACKEND_URL";
 
