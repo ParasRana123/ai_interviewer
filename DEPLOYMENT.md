@@ -52,34 +52,34 @@ This guide provides step-by-step instructions to deploy the **AI Technical Inter
 ### Option B: Manual Web Service Setup on Render
 1. Go to [Render Dashboard](https://dashboard.render.com/) and click **New +** > **Web Service**.
 2. Connect your GitHub repository (`ParasRana123/ai_interviewer`).
-3. Fill in the following configuration details:
-   - **Name**: `ai-interviewer-backend`
-   - **Region**: `Oregon (US West)` (or closest to your DB)
-   - **Branch**: `main`
-   - **Root Directory**: *(Leave empty or set to root `.`)*
-   - **Runtime**: `Node` (or `Docker`)
-   - **Build Command**:
-     ```bash
-     bun install && cd apps/backend && bun x prisma generate
-     ```
-   - **Start Command**:
-     ```bash
-     cd apps/backend && bun run index.ts
-     ```
-   - **Instance Type**: `Free`
+3. Configure the exact settings below:
+   | Setting | Value | Notes |
+   | :--- | :--- | :--- |
+   | **Name** | `ai-interviewer-backend` | Render generates a live URL for this name |
+   | **Region** | `Oregon (US West)` | Closest to your database |
+   | **Branch** | `main` | Production branch |
+   | **Root Directory** | *(Leave Empty)* | Defaults to repo root |
+   | **Runtime** | `Node` | Bun runs on Node runtime container |
+   | **Build Command** | `bun install && cd apps/backend && bun x prisma generate` | Generates Prisma client |
+   | **Start Command** | `cd apps/backend && bun run index.ts` | Launches Bun Express server |
+   | **Instance Type** | `Free` | Free tier supported |
+
 4. Expand **Advanced** > **Environment Variables** and add:
    | Key | Value | Description |
    | :--- | :--- | :--- |
-   | `NODE_ENV` | `production` | Production mode |
+   | `NODE_ENV` | `production` | Production environment |
    | `GEMINI_API_KEY` | `AIzaSy...` | Your Google Gemini API Key |
    | `DATABASE_URL` | `postgresql://...` | Your PostgreSQL Connection String |
    | `PORT` | `10000` | Port for Render routing |
    | `CORS_ORIGIN` | `*` | Allowed origins (or your Vercel URL) |
+
 5. Click **Create Web Service**.
-6. Once deployed, note down your backend URL (e.g., `https://ai-interviewer-backend.onrender.com`).
+6. **IMPORTANT — Note Your Exact Live Render URL**:
+   - Render assigns a live URL directly below the service name at the top of the screen (e.g., `https://ai-interviewer-backend-xxxx.onrender.com` or `https://ai-interviewer-backend.onrender.com`).
+   - If the exact name `ai-interviewer-backend` was previously claimed by another user, Render appends a unique random suffix (like `-abc1`). **You must use this exact live URL in Vercel.**
 7. Test the health check endpoint in your browser:
    ```
-   https://ai-interviewer-backend.onrender.com/health
+   https://YOUR-RENDER-URL.onrender.com/health
    ```
    Should return: `{"status":"healthy","uptime":...}`
 
@@ -87,24 +87,31 @@ This guide provides step-by-step instructions to deploy the **AI Technical Inter
 
 ## 💻 Step 3: Deploy Frontend to Vercel
 
-1. Log in to [Vercel Dashboard](https://vercel.com/dashboard).
-2. Click **Add New...** > **Project**.
-3. Import your GitHub repository: `ParasRana123/ai_interviewer`.
-4. In the **Configure Project** screen:
-   - **Project Name**: `ai-interviewer-frontend`
-   - **Framework Preset**: Select **Other**
-   - **Root Directory**: Click **Edit** and select `apps/frontend`
-5. Expand **Build and Output Settings**:
-   - **Build Command**: `bun run build.ts`
-   - **Output Directory**: `dist`
-   - **Install Command**: `bun install`
-6. Expand **Environment Variables** and add:
-   | Key | Value | Description |
-   | :--- | :--- | :--- |
-   | `VITE_BACKEND_URL` | `https://ai-interviewer-backend.onrender.com` | Your Render Backend URL from Step 2 |
-7. Click **Deploy**.
-8. Vercel will build the frontend bundle with `vercel.json` SPA routing support.
-9. Your application will be live at: `https://ai-interviewer-frontend.vercel.app`!
+### Option 1: Root Directory = `apps/frontend` (Recommended)
+1. In Vercel Dashboard, click **Add New...** > **Project**.
+2. Import `ParasRana123/ai_interviewer`.
+3. Configure settings:
+   | Setting | Value |
+   | :--- | :--- |
+   | **Framework Preset** | **Other** |
+   | **Root Directory** | Click **Edit** > select `apps/frontend` |
+   | **Build Command** | `bun run build.ts` |
+   | **Output Directory** | `dist` |
+   | **Install Command** | `bun install` |
+4. Under **Environment Variables**, add:
+   | Key | Value |
+   | :--- | :--- |
+   | `VITE_BACKEND_URL` | `https://YOUR-EXACT-RENDER-URL.onrender.com` *(from Step 2)* |
+5. Click **Deploy**.
+
+---
+
+### Option 2: Root Directory = `.` (Repository Root)
+If you deploy from repository root without changing root directory:
+- **Build Command**: `cd apps/frontend && bun install && bun run build.ts`
+- **Output Directory**: `apps/frontend/dist`
+- **Install Command**: `bun install`
+- **Environment Variables**: `VITE_BACKEND_URL` = `https://YOUR-EXACT-RENDER-URL.onrender.com`
 
 ---
 
