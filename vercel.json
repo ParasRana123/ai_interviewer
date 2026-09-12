@@ -11,6 +11,10 @@
       "destination": "https://ai-interviewer-backend.onrender.com/api/v1/:match*"
     },
     {
+      "source": "/api/:match*",
+      "destination": "https://ai-interviewer-backend.onrender.com/api/:match*"
+    },
+    {
       "source": "/health",
       "destination": "https://ai-interviewer-backend.onrender.com/health"
     },
