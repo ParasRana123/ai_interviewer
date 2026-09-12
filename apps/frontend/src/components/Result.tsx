@@ -48,7 +48,9 @@ export function Result() {
 
     const fetchResult = async () => {
       try {
-        const response = await axios.get(`${BACKEND_URL}/api/v1/result/${interviewId}`);
+        const response = await axios.get(`${BACKEND_URL}/api/v1/result/${interviewId}`, {
+          timeout: 45000,
+        });
         const data = response.data;
 
         let feedbackText = data.feedback || "";

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { useNavigate } from "react-router";
@@ -12,6 +12,7 @@ import {
   Code2,
   Mic,
   BrainCircuit,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { BACKEND_URL } from "@/lib/config";
@@ -19,9 +20,30 @@ import { BACKEND_URL } from "@/lib/config";
 export function Form() {
   const [resume, setResume] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+
+  // Proactive background ping on mount to wake up Render free-tier backend
+  useEffect(() => {
+    let isMounted = true;
+    axios
+      .get(`${BACKEND_URL}/health`, { timeout: 15000 })
+      .then((res) => {
+        if (isMounted && res.data?.status === "healthy") {
+          console.log("AI Interviewer Backend is online and responsive.");
+        }
+      })
+      .catch((err) => {
+        // Silent catch: Free-tier instance might be spinning up
+        console.info("Proactive health check ping dispatched to backend.");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   function handleFileSelection(file: File | undefined) {
     if (!file) return;
@@ -64,46 +86,78 @@ export function Form() {
       return;
     }
 
-    try {
-      setLoading(true);
+    setLoading(true);
+    setLoadingStatus("Connecting to AI Interviewer server...");
 
-      const formData = new FormData();
-      formData.append("resume", resume);
+    const maxRetries = 2; // Up to 3 attempts total
+    let lastError: any = null;
 
-      const response = await axios.post(
-        `${BACKEND_URL}/api/v1/upload-resume`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-          timeout: 45000,
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          setLoadingStatus(`Server is waking up (attempt ${attempt + 1}/${maxRetries + 1})...`);
+          toast.info(`Retrying connection to backend (attempt ${attempt + 1}/${maxRetries + 1})...`);
+          await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+        } else {
+          setLoadingStatus("Parsing resume & analyzing skills with Gemini AI...");
         }
-      );
 
-      const responseData = response.data;
-      if (responseData?.interviewId) {
-        toast.success("Resume parsed successfully! Starting interview...");
-        navigate(`/interview/${responseData.interviewId}`);
-      } else {
-        toast.error("Unexpected response from server.");
+        const formData = new FormData();
+        formData.append("resume", resume);
+
+        const response = await axios.post(
+          `${BACKEND_URL}/api/v1/upload-resume`,
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+            timeout: 60000, // 60s to accommodate Render cold starts & AI parsing
+          }
+        );
+
+        const responseData = response.data;
+        if (responseData?.interviewId) {
+          toast.success("Resume parsed successfully! Starting interview session...");
+          navigate(`/interview/${responseData.interviewId}`);
+          return;
+        } else {
+          throw new Error("Unexpected response structure from server.");
+        }
+      } catch (error: any) {
+        lastError = error;
+        console.error(`Resume upload attempt ${attempt + 1} failed:`, error);
+
+        const isNetworkOrTimeout =
+          !error.response ||
+          error.code === "ECONNABORTED" ||
+          error.code === "ERR_NETWORK" ||
+          error.message?.includes("Network Error");
+
+        // Only retry if it's a network/cold start error, not a 400 client error
+        if (!isNetworkOrTimeout || attempt === maxRetries) {
+          break;
+        }
       }
-    } catch (error: any) {
-      console.error("Resume upload error:", error);
-      let serverMessage = "Failed to upload and parse resume.";
-      if (error.response?.data?.message) {
-        serverMessage = error.response.data.message;
-      } else if (error.response?.data?.error) {
-        serverMessage = error.response.data.error;
-      } else if (error.code === "ECONNABORTED") {
-        serverMessage = "Request timed out. Please check your network or try again.";
-      } else if (error.message) {
-        serverMessage = error.message;
-      }
-      toast.error(serverMessage);
-    } finally {
-      setLoading(false);
     }
+
+    // Final error handling if all retries exhausted
+    let serverMessage = "Failed to connect to backend server. Please try again.";
+    if (lastError?.response?.data?.message) {
+      serverMessage = lastError.response.data.message;
+    } else if (lastError?.response?.data?.error) {
+      serverMessage = lastError.response.data.error;
+    } else if (lastError?.code === "ECONNABORTED") {
+      serverMessage = "Server took too long to respond. The free tier backend may be waking up. Please try again.";
+    } else if (lastError?.message?.includes("Network Error") || !lastError?.response) {
+      serverMessage = "Could not reach backend service. The server may be waking up from sleep. Please try again in a few seconds.";
+    } else if (lastError?.message) {
+      serverMessage = lastError.message;
+    }
+
+    toast.error(serverMessage);
+    setLoading(false);
+    setLoadingStatus("");
   }
 
   const formatFileSize = (bytes: number) => {
@@ -209,8 +263,8 @@ export function Form() {
           >
             {loading ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Parsing resume & preparing interview...</span>
+                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                <span className="truncate">{loadingStatus || "Parsing resume & preparing interview..."}</span>
               </>
             ) : (
               <>

@@ -69,9 +69,11 @@ export function Interview() {
       setIsAiThinking(true);
 
       try {
-        const response = await axios.post(`${BACKEND_URL}/api/v1/interview/respond/${interviewId}`, {
-          message: cleanText,
-        });
+        const response = await axios.post(
+          `${BACKEND_URL}/api/v1/interview/respond/${interviewId}`,
+          { message: cleanText },
+          { timeout: 45000 }
+        );
 
         const reply = response.data?.reply;
         if (reply) {
