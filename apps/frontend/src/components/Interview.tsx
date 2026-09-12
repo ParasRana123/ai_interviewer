@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { BACKEND_URL } from "@/lib/config";
+import { BACKEND_URL, getBackendUrl } from "@/lib/config";
 import { useSpeechRecognition } from "@/lib/useSpeechRecognition";
 import { useSpeechSynthesis } from "@/lib/useSpeechSynthesis";
 import { AiCallTile } from "@/components/AiCallTile";
@@ -69,11 +69,25 @@ export function Interview() {
       setIsAiThinking(true);
 
       try {
-        const response = await axios.post(
-          `${BACKEND_URL}/api/v1/interview/respond/${interviewId}`,
-          { message: cleanText },
-          { timeout: 45000 }
-        );
+        const backendUrl = getBackendUrl();
+        let response: any = null;
+        try {
+          response = await axios.post(
+            `${backendUrl}/api/v1/interview/respond/${interviewId}`,
+            { message: cleanText },
+            { timeout: 45000 }
+          );
+        } catch (postErr: any) {
+          if (postErr.response?.status === 404) {
+            response = await axios.post(
+              `${backendUrl}/interview/respond/${interviewId}`,
+              { message: cleanText },
+              { timeout: 45000 }
+            );
+          } else {
+            throw postErr;
+          }
+        }
 
         const reply = response.data?.reply;
         if (reply) {
@@ -156,9 +170,19 @@ export function Interview() {
 
         // 2. Fetch detailed interview profile
         if (interviewId) {
+          const backendUrl = getBackendUrl();
           try {
-            const detailsRes = await axios.get(`${BACKEND_URL}/api/v1/interview/details/${interviewId}`);
-            if (isMounted && detailsRes.data?.interview) {
+            let detailsRes: any = null;
+            try {
+              detailsRes = await axios.get(`${backendUrl}/api/v1/interview/details/${interviewId}`, { timeout: 30000 });
+            } catch (dErr: any) {
+              if (dErr.response?.status === 404) {
+                detailsRes = await axios.get(`${backendUrl}/interview/details/${interviewId}`, { timeout: 30000 });
+              } else {
+                throw dErr;
+              }
+            }
+            if (isMounted && detailsRes?.data?.interview) {
               setCandidateInfo(detailsRes.data.interview);
             }
           } catch (detailsErr) {
@@ -166,7 +190,16 @@ export function Interview() {
           }
 
           // 3. Start Gemini interview session on backend
-          const startRes = await axios.post(`${BACKEND_URL}/api/v1/interview/start/${interviewId}`);
+          let startRes: any = null;
+          try {
+            startRes = await axios.post(`${backendUrl}/api/v1/interview/start/${interviewId}`, {}, { timeout: 45000 });
+          } catch (sErr: any) {
+            if (sErr.response?.status === 404) {
+              startRes = await axios.post(`${backendUrl}/interview/start/${interviewId}`, {}, { timeout: 45000 });
+            } else {
+              throw sErr;
+            }
+          }
           if (isMounted && startRes.data?.success) {
             const initialGreeting = startRes.data.message;
             setCandidateInfo((prev) => ({

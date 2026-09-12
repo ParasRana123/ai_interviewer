@@ -1,4 +1,4 @@
-import { BACKEND_URL } from "@/lib/config";
+import { BACKEND_URL, getBackendUrl } from "@/lib/config";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router";
@@ -48,10 +48,18 @@ export function Result() {
 
     const fetchResult = async () => {
       try {
-        const response = await axios.get(`${BACKEND_URL}/api/v1/result/${interviewId}`, {
-          timeout: 45000,
-        });
-        const data = response.data;
+        const backendUrl = getBackendUrl();
+        let response: any = null;
+        try {
+          response = await axios.get(`${backendUrl}/api/v1/result/${interviewId}`, { timeout: 45000 });
+        } catch (rErr: any) {
+          if (rErr.response?.status === 404) {
+            response = await axios.get(`${backendUrl}/result/${interviewId}`, { timeout: 45000 });
+          } else {
+            throw rErr;
+          }
+        }
+        const data = response?.data;
 
         let feedbackText = data.feedback || "";
         let strengths: string[] = Array.isArray(data.strengths) ? data.strengths : [];
