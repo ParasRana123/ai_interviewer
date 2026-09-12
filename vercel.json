@@ -7,6 +7,14 @@
   "cleanUrls": true,
   "rewrites": [
     {
+      "source": "/api/v1/:match*",
+      "destination": "https://ai-interviewer-backend.onrender.com/api/v1/:match*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://ai-interviewer-backend.onrender.com/health"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
