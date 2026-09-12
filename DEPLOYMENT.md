@@ -138,7 +138,7 @@ This guide provides step-by-step instructions to deploy the **AI Technical Inter
 - Web Speech API requires **HTTPS** to access the microphone. Vercel automatically provisions free SSL/HTTPS certificates. Always access the site via `https://` (not `http://`).
 
 ### 2. Render Free Tier Sleep & Cold Starts
-- Render free tier instances enter sleep mode after 15 minutes of inactivity. The first request after sleep may take ~30–45 seconds to wake up.
+- Render free tier instances enter sleep mode after 15 minutes of inactivity. The first request after sleep may take ~30–45 seconds to wake up. The frontend automatically performs background wake-up pings and exponential backoff retries.
 
 ### 3. Vercel 404 on Direct Page Refresh
 - This is resolved automatically by the included `vercel.json` SPA rewrite rule:
@@ -147,3 +147,15 @@ This guide provides step-by-step instructions to deploy the **AI Technical Inter
     "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
   }
   ```
+
+### 4. `AxiosError: Network Error` or `net::ERR_CONNECTION_REFUSED`
+- **Cause**: The frontend was attempting to connect to `http://localhost:3001` instead of your deployed Render backend because the environment variable was omitted or build-time default was missing.
+- **Resolution**:
+  1. The platform automatically detects production hostnames and falls back to `https://ai-interviewer-backend.onrender.com`.
+  2. `vercel.json` includes a reverse proxy route (`/api/v1/:path*`) directing API calls seamlessly to the Render backend.
+  3. Ensure `VITE_BACKEND_URL` is set in Vercel project settings:
+     ```env
+     VITE_BACKEND_URL=https://ai-interviewer-backend.onrender.com
+     ```
+  4. If your Render backend is sleeping on the free tier, the frontend automatically dispatches background wake-up pings and retries failed requests with exponential backoff.
+

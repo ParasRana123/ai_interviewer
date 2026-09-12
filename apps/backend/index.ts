@@ -25,35 +25,34 @@ if (process.env.CORS_ORIGIN) {
   });
 }
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, server-to-server, Render healthchecks)
-      if (!origin) return callback(null, true);
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, server-to-server, Render healthchecks)
+    if (!origin) return callback(null, true);
 
-      // Check explicit allowed origins or vercel.app preview domains
-      const isAllowed =
-        allowedOrigins.includes(origin) ||
-        /\.vercel\.app$/.test(origin) ||
-        origin.startsWith("http://localhost:") ||
-        process.env.NODE_ENV !== "production";
+    // Allow all vercel preview domains, localhost, or configured allowed origins
+    const isAllowed =
+      allowedOrigins.includes(origin) ||
+      /\.vercel\.app$/.test(origin) ||
+      origin.startsWith("http://localhost:") ||
+      origin.startsWith("https://localhost:") ||
+      process.env.NODE_ENV !== "production" ||
+      process.env.CORS_ORIGIN === "*";
 
-      if (isAllowed) {
-        callback(null, true);
-      } else {
-        // In production fallback, log notice but allow if CORS_PERMISSIVE is set
-        if (process.env.CORS_PERMISSIVE === "true") {
-          callback(null, true);
-        } else {
-          callback(null, true); // Permissive for public interview API
-        }
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-  })
-);
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      // Permissive fallback for public API
+      callback(null, true);
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
