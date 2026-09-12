@@ -152,10 +152,14 @@ This guide provides step-by-step instructions to deploy the **AI Technical Inter
 - **Cause**: The frontend was attempting to connect to `http://localhost:3001` instead of your deployed Render backend because the environment variable was omitted or build-time default was missing.
 - **Resolution**:
   1. The platform automatically detects production hostnames and falls back to `https://ai-interviewer-backend.onrender.com`.
-  2. `vercel.json` includes a reverse proxy route (`/api/v1/:path*`) directing API calls seamlessly to the Render backend.
+  2. `vercel.json` includes a reverse proxy route (`/api/v1/:match*`) directing API calls seamlessly to the Render backend.
   3. Ensure `VITE_BACKEND_URL` is set in Vercel project settings:
      ```env
      VITE_BACKEND_URL=https://ai-interviewer-backend.onrender.com
      ```
   4. If your Render backend is sleeping on the free tier, the frontend automatically dispatches background wake-up pings and retries failed requests with exponential backoff.
+
+### 5. `Missing parameter name at index 1: *` (`pathToRegexpError`) on Express 5
+- **Cause**: Express 5 uses `path-to-regexp` v8, which disallows unparameterized `"*"` route patterns (like `app.options("*")`).
+- **Resolution**: Global CORS middleware `app.use(cors(corsOptions))` already handles all preflight `OPTIONS` requests across every path without requiring `app.options("*")`. The route handlers and 404 middleware are fully aligned with Express 5 standards.
 
