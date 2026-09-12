@@ -9,6 +9,7 @@ import { getCodeforcesStats } from "../services/codeforces.service";
 import { prisma } from "../prisma/db";
 import { initSideband } from "../sideband";
 import { calculateResult } from "../result";
+import { startInterviewSession, generateNextInterviewTurn } from "../services/interview.service";
 
 const router = express.Router();
 const upload = multer();
@@ -105,8 +106,6 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
     }
   }
 );
-
-import { startInterviewSession, generateNextInterviewTurn } from "../services/interview.service";
 
 // Inform client of pure-Gemini voice & STT architecture
 router.post("/session/:interviewId", async (req, res) => {

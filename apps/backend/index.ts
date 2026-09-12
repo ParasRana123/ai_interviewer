@@ -85,8 +85,10 @@ app.get("/healthz", healthHandler);
 app.get("/api/health", healthHandler);
 app.get("/api/v1/health", healthHandler);
 
-// API Routes
+// API Routes (Mounted on multiple standard path prefixes to prevent 404s across proxies and direct callers)
 app.use("/api/v1", resumeRouter);
+app.use("/api", resumeRouter);
+app.use("/", resumeRouter);
 
 // Express 5 compatible 404 handler (without invalid wildcard strings)
 app.use((_req, res) => {
