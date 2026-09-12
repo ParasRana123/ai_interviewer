@@ -58,7 +58,18 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(express.text({ type: ["application/sdp", "text/plain"] }));
 
-// Health Check Endpoints for Render / Railway / Vercel
+// Health Check Endpoints for Render / Railway / Docker / Kubernetes
+const healthHandler = (_req: express.Request, res: express.Response) => {
+  res.status(200).json({
+    status: "healthy",
+    service: "AI Technical Interviewer Backend",
+    version: "1.0.0",
+    engine: "Google Gemini 3.6 Flash",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+};
+
 app.get("/", (_req, res) => {
   res.json({
     status: "ok",
@@ -69,13 +80,10 @@ app.get("/", (_req, res) => {
   });
 });
 
-app.get("/health", (_req, res) => {
-  res.status(200).json({
-    status: "healthy",
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-  });
-});
+app.get("/health", healthHandler);
+app.get("/healthz", healthHandler);
+app.get("/api/health", healthHandler);
+app.get("/api/v1/health", healthHandler);
 
 // API Routes
 app.use("/api/v1", resumeRouter);
@@ -119,4 +127,12 @@ process.on("SIGINT", () => {
     console.log("Server closed");
     process.exit(0);
   });
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled Promise Rejection:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
 });
