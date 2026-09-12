@@ -2,14 +2,14 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { RESUME_PARSER_PROMPT } from "../prompts/prompt";
 import { ResumeSchema } from "../types/resume.schema";
 
-function getGenerativeModel() {
+function getGenerativeModel(modelName = "gemini-2.5-flash") {
     const apiKey = process.env.GEMINI_API_KEY || "";
     if (!apiKey) {
         return null;
     }
     const genai = new GoogleGenerativeAI(apiKey);
     return genai.getGenerativeModel({
-        model: "gemini-3.6-flash",
+        model: modelName,
         generationConfig: { responseMimeType: "application/json" }
     });
 }
@@ -40,7 +40,7 @@ function extractHeuristics(text: string) {
         experience: [],
         projects: [],
         achievements: [],
-        skills: detectedSkills,
+        skills: detectedSkills.length > 0 ? detectedSkills : ["Software Engineering", "Problem Solving", "Web Development"],
         codingProfiles: {
             leetcode: null,
             codeforces: null,
@@ -54,8 +54,8 @@ export async function parseResume(text: string) {
     const fallbackData = extractHeuristics(text);
 
     try {
-        const model = getGenerativeModel();
-        if (!model) {
+        const apiKey = process.env.GEMINI_API_KEY || "";
+        if (!apiKey) {
             console.warn("GEMINI_API_KEY not found, using heuristic resume extraction.");
             return fallbackData;
         }
@@ -66,9 +66,28 @@ export async function parseResume(text: string) {
            ${text}
         `;
 
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        const content = response.text();
+        // Timeboxed LLM call (max 10 seconds) with fallback models
+        const candidateModels = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"];
+        let content: string | null = null;
+
+        for (const modelName of candidateModels) {
+            try {
+                const model = getGenerativeModel(modelName);
+                if (!model) break;
+
+                const generatePromise = model.generateContent(prompt).then((res) => res.response.text());
+                const timeoutPromise = new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error("LLM parse timeout (10s)")), 10000)
+                );
+
+                content = await Promise.race([generatePromise, timeoutPromise]);
+                if (content && content.trim()) {
+                    break;
+                }
+            } catch (err: any) {
+                console.warn(`Gemini parse with ${modelName} notice:`, err?.message || err);
+            }
+        }
 
         if (!content) {
             return fallbackData;

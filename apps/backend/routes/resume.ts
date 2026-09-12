@@ -47,26 +47,33 @@ router.post("/upload-resume", upload.single("resume"), async (req, res) => {
         codeforcesStats: null
       };
 
+      // Fetch coding profiles stats concurrently with 3s timeout
+      const profilePromises: Promise<any>[] = [];
+
       if (profiles.github) {
-        try {
-          enrichedResume.githubStats = await getGithuStats(profiles.github);
-        } catch (error) {
-          console.warn("GitHub Stats Warning:", error);
-        }
+        profilePromises.push(
+          getGithuStats(profiles.github)
+            .then((stats) => { enrichedResume.githubStats = stats; })
+            .catch((err) => console.warn("GitHub Stats Notice:", err?.message || err))
+        );
       }
       if (profiles.leetcode) {
-        try {
-          enrichedResume.leetcodeStats = await getLeetcodeStats(profiles.leetcode);
-        } catch (error) {
-          console.warn("LeetCode Stats Warning:", error);
-        }
+        profilePromises.push(
+          getLeetcodeStats(profiles.leetcode)
+            .then((stats) => { enrichedResume.leetcodeStats = stats; })
+            .catch((err) => console.warn("LeetCode Stats Notice:", err?.message || err))
+        );
       }
       if (profiles.codeforces) {
-        try {
-          enrichedResume.codeforcesStats = await getCodeforcesStats(profiles.codeforces);
-        } catch (error) {
-          console.warn("Codeforces Stats Warning:", error);
-        }
+        profilePromises.push(
+          getCodeforcesStats(profiles.codeforces)
+            .then((stats) => { enrichedResume.codeforcesStats = stats; })
+            .catch((err) => console.warn("Codeforces Stats Notice:", err?.message || err))
+        );
+      }
+
+      if (profilePromises.length > 0) {
+        await Promise.allSettled(profilePromises);
       }
 
       const interview = await prisma.interview.create({

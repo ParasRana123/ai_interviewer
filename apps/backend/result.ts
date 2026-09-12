@@ -32,14 +32,14 @@ Return ONLY valid JSON matching this schema:
 }
 `;
 
-function getGenerativeModel() {
+function getGenerativeModel(modelName = "gemini-2.5-flash") {
     const apiKey = process.env.GEMINI_API_KEY || "";
     if (!apiKey) {
         throw new Error("GEMINI_API_KEY environment variable is not configured");
     }
     const genai = new GoogleGenerativeAI(apiKey);
     return genai.getGenerativeModel({
-        model: "gemini-3.6-flash",
+        model: modelName,
         generationConfig: {
             responseMimeType: "application/json"
         }
