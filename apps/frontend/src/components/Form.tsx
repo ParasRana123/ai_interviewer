@@ -12,26 +12,31 @@ import {
   Code2,
   Mic,
   BrainCircuit,
-  RefreshCw,
+  Settings,
+  Server,
 } from "lucide-react";
 import { Button } from "./ui/button";
-import { BACKEND_URL } from "@/lib/config";
+import { BACKEND_URL, getBackendUrl } from "@/lib/config";
+import { BackendSettingsModal } from "./BackendSettingsModal";
 
 export function Form() {
   const [resume, setResume] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+
+  const currentBackendUrl = getBackendUrl();
 
   // Proactive background ping on mount to wake up Render free-tier backend
   useEffect(() => {
     let isMounted = true;
     axios
-      .get(`${BACKEND_URL}/health`, { timeout: 15000 })
+      .get(`${currentBackendUrl}/health`, { timeout: 15000 })
       .then((res) => {
-        if (isMounted && res.data?.status === "healthy") {
+        if (isMounted && (res.data?.status === "healthy" || res.status === 200)) {
           console.log("AI Interviewer Backend is online and responsive.");
         }
       })
@@ -43,7 +48,7 @@ export function Form() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentBackendUrl]);
 
   function handleFileSelection(file: File | undefined) {
     if (!file) return;
@@ -105,18 +110,36 @@ export function Form() {
         const formData = new FormData();
         formData.append("resume", resume);
 
-        const response = await axios.post(
-          `${BACKEND_URL}/api/v1/upload-resume`,
-          formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-            timeout: 60000, // 60s to accommodate Render cold starts & AI parsing
-          }
-        );
+        let response: any = null;
 
-        const responseData = response.data;
+        // Try primary /api/v1/upload-resume route first
+        try {
+          response = await axios.post(
+            `${currentBackendUrl}/api/v1/upload-resume`,
+            formData,
+            {
+              headers: { "Content-Type": "multipart/form-data" },
+              timeout: 60000,
+            }
+          );
+        } catch (v1Err: any) {
+          // If /api/v1 returned 404, fallback to /upload-resume directly
+          if (v1Err.response?.status === 404) {
+            console.warn("/api/v1/upload-resume returned 404, trying /upload-resume fallback...");
+            response = await axios.post(
+              `${currentBackendUrl}/upload-resume`,
+              formData,
+              {
+                headers: { "Content-Type": "multipart/form-data" },
+                timeout: 60000,
+              }
+            );
+          } else {
+            throw v1Err;
+          }
+        }
+
+        const responseData = response?.data;
         if (responseData?.interviewId) {
           toast.success("Resume parsed successfully! Starting interview session...");
           navigate(`/interview/${responseData.interviewId}`);
@@ -143,7 +166,9 @@ export function Form() {
 
     // Final error handling if all retries exhausted
     let serverMessage = "Failed to connect to backend server. Please try again.";
-    if (lastError?.response?.data?.message) {
+    if (lastError?.response?.status === 404) {
+      serverMessage = `Backend returned 404 Not Found at ${currentBackendUrl}. If your Render backend has a custom subdomain, click "Configure Backend" in the top bar.`;
+    } else if (lastError?.response?.data?.message) {
       serverMessage = lastError.response.data.message;
     } else if (lastError?.response?.data?.error) {
       serverMessage = lastError.response.data.error;
@@ -167,7 +192,25 @@ export function Form() {
   };
 
   return (
-    <div className="min-h-screen w-screen flex flex-col justify-center items-center p-4 bg-gradient-to-b from-background via-background/95 to-muted/20">
+    <div className="min-h-screen w-screen flex flex-col justify-center items-center p-4 bg-gradient-to-b from-background via-background/95 to-muted/20 relative">
+      {/* Top Navigation / Backend Status Pill */}
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6">
+        <button
+          onClick={() => setIsSettingsOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-card/80 hover:bg-card border border-border shadow-sm text-muted-foreground hover:text-foreground transition-all"
+          title="Configure backend target URL"
+        >
+          <Server className="w-3.5 h-3.5 text-blue-500" />
+          <span className="hidden sm:inline">Backend API</span>
+          <Settings className="w-3 h-3 text-muted-foreground ml-0.5" />
+        </button>
+      </div>
+
+      <BackendSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
+
       <div className="w-full max-w-lg space-y-6">
         {/* Header Title */}
         <div className="text-center space-y-2">
