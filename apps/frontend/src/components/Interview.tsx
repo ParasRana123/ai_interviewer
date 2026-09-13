@@ -9,7 +9,7 @@ import { LiveCaptionsStrip } from "@/components/LiveCaptionsStrip";
 import { CallControlsBar } from "@/components/CallControlsBar";
 import { InCallChatDrawer } from "@/components/InCallChatDrawer";
 import axios from "axios";
-import { Sparkles, Bot, User, Radio, ShieldCheck } from "lucide-react";
+import { Sparkles, Bot, User, Radio, ShieldCheck, Volume2 } from "lucide-react";
 
 interface ChatMessage {
   id: string;
@@ -42,12 +42,23 @@ export function Interview() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
 
+  // Keep latest mute status in ref for stable turn-taking callbacks
+  const isMutedRef = useRef(isMuted);
+  isMutedRef.current = isMuted;
+
+  const isAiVoiceMutedRef = useRef(isAiVoiceMuted);
+  isAiVoiceMutedRef.current = isAiVoiceMuted;
+
+  const hasInitializedRef = useRef(false);
+
   // Speech Synthesis Hook for AI Voice responses
   const {
     isSupported: isTtsSupported,
     isSpeaking: isAiSpeaking,
+    isAutoplayBlocked,
     speak,
     cancel: cancelSpeech,
+    unlockAudio,
   } = useSpeechSynthesis({
     rate: 1.05,
     pitch: 1.0,
@@ -100,18 +111,29 @@ export function Interview() {
           };
           setMessages((prev) => [...prev, aiMsg]);
 
-          // Speak AI response out loud if not muted
-          if (!isAiVoiceMuted) {
-            speak(reply);
+          // Speak AI response out loud if not muted, then resume mic listening
+          if (!isAiVoiceMutedRef.current) {
+            speak(reply, () => {
+              if (!isMutedRef.current) {
+                startListeningRef.current?.();
+              }
+            });
+          } else {
+            if (!isMutedRef.current) {
+              startListeningRef.current?.();
+            }
           }
         }
       } catch (err: any) {
         console.error("Failed to generate AI interview response:", err);
+        if (!isMutedRef.current) {
+          startListeningRef.current?.();
+        }
       } finally {
         setIsAiThinking(false);
       }
     },
-    [interviewId, isAiThinking, isAiVoiceMuted, speak]
+    [interviewId, isAiThinking, speak]
   );
 
   // Web Speech API Hook for microphone speech transcription
@@ -132,23 +154,42 @@ export function Interview() {
     onFinalTranscript: sendCandidateAnswer,
   });
 
+  const startListeningRef = useRef(startListening);
+  startListeningRef.current = startListening;
+
+  const stopListeningRef = useRef(stopListening);
+  stopListeningRef.current = stopListening;
+
   // Turn-taking coordination: Pause STT when AI is speaking to prevent speaker echo feedback
   useEffect(() => {
     if (isAiSpeaking) {
       stopListening();
-    } else if (!isMuted && isInitialized && connectionStatus === "connected") {
-      const timer = setTimeout(() => {
-        if (!isMuted && !isAiSpeaking) {
-          startListening();
-        }
-      }, 300);
-      return () => clearTimeout(timer);
     }
-  }, [isAiSpeaking, isMuted, isInitialized, connectionStatus, startListening, stopListening]);
+  }, [isAiSpeaking, stopListening]);
+
+  // Global user gesture listener to automatically unlock audio if browser autoplay was blocked
+  useEffect(() => {
+    const handleGesture = () => {
+      unlockAudio();
+    };
+
+    window.addEventListener("click", handleGesture);
+    window.addEventListener("touchstart", handleGesture);
+    window.addEventListener("keydown", handleGesture);
+
+    return () => {
+      window.removeEventListener("click", handleGesture);
+      window.removeEventListener("touchstart", handleGesture);
+      window.removeEventListener("keydown", handleGesture);
+    };
+  }, [unlockAudio]);
 
   // Initialize Microphone Media Stream and Start Session
   useEffect(() => {
     let isMounted = true;
+
+    if (!interviewId || hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
 
     async function initSession() {
       try {
@@ -160,7 +201,6 @@ export function Interview() {
           if (isMounted) {
             mediaStreamRef.current = stream;
             setAudioStream(stream);
-            startListening();
           } else {
             stream.getTracks().forEach((t) => t.stop());
           }
@@ -200,6 +240,7 @@ export function Interview() {
               throw sErr;
             }
           }
+
           if (isMounted && startRes.data?.success) {
             const initialGreeting = startRes.data.message;
             setCandidateInfo((prev) => ({
@@ -218,32 +259,43 @@ export function Interview() {
             setConnectionStatus("connected");
             setIsInitialized(true);
 
-            // Speak greeting out loud
-            speak(initialGreeting);
+            // Speak initial opening greeting out loud, then start microphone listening once speech finishes
+            setTimeout(() => {
+              if (!isAiVoiceMutedRef.current) {
+                speak(initialGreeting, () => {
+                  if (!isMutedRef.current) {
+                    startListeningRef.current?.();
+                  }
+                });
+              } else {
+                if (!isMutedRef.current) {
+                  startListeningRef.current?.();
+                }
+              }
+            }, 300);
           }
         }
       } catch (err) {
         console.error("Interview session initialization error:", err);
         if (isMounted) {
           setConnectionStatus("connected");
+          setIsInitialized(true);
         }
       }
     }
 
-    if (interviewId && !isInitialized) {
-      initSession();
-    }
+    initSession();
 
     return () => {
       isMounted = false;
-      stopListening();
+      stopListeningRef.current?.();
       cancelSpeech();
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((track) => track.stop());
         mediaStreamRef.current = null;
       }
     };
-  }, [interviewId, isInitialized, startListening, stopListening, speak, cancelSpeech]);
+  }, [interviewId, speak, cancelSpeech]);
 
   // Toggle candidate microphone
   const toggleMuteMic = () => {
@@ -269,11 +321,16 @@ export function Interview() {
     setIsAiVoiceMuted(!isAiVoiceMuted);
   };
 
-  // Replay last AI statement
+  // Replay last AI statement out loud
   const handleReplayQuestion = () => {
     const lastAiMsg = [...messages].reverse().find((m) => m.sender === "interviewer");
     if (lastAiMsg && lastAiMsg.text) {
-      speak(lastAiMsg.text);
+      unlockAudio();
+      speak(lastAiMsg.text, () => {
+        if (!isMutedRef.current) {
+          startListeningRef.current?.();
+        }
+      });
     }
   };
 
@@ -304,48 +361,69 @@ export function Interview() {
   return (
     <div className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col items-center justify-between p-3 sm:p-5 md:p-6 select-none overflow-x-hidden">
       {/* Top Header Bar */}
-      <header className="w-full max-w-6xl flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 backdrop-blur-md border border-slate-800/80 rounded-2xl px-4 py-3 shadow-lg">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-950">
-            <Sparkles className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm sm:text-base font-bold text-slate-100">Live AI Technical Interview</h1>
-              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-950 text-blue-300 border border-blue-800">
-                Gemini 3.6 Flash
-              </span>
+      <header className="w-full max-w-6xl flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 backdrop-blur-md border border-slate-800/80 rounded-2xl px-4 py-3 shadow-lg">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-950">
+              <Sparkles className="w-4 h-4" />
             </div>
-            <p className="text-[11px] text-slate-400">
-              {candidateInfo?.name ? `Candidate: ${candidateInfo.name}` : "Real-Time AI Voice Assessment"}
-            </p>
-          </div>
-        </div>
-
-        {/* Status Indicators */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {candidateInfo?.skills && candidateInfo.skills.length > 0 && (
-            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs">
-              <span className="text-[11px] text-slate-400 font-medium">Domain:</span>
-              <span className="text-[11px] text-blue-300 font-semibold">{candidateInfo.skills.slice(0, 3).join(", ")}</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm sm:text-base font-bold text-slate-100">Live AI Technical Interview</h1>
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-950 text-blue-300 border border-blue-800">
+                  Gemini 3.6 Flash
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                {candidateInfo?.name ? `Candidate: ${candidateInfo.name}` : "Real-Time AI Voice Assessment"}
+              </p>
             </div>
-          )}
+          </div>
 
-          <div
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold border ${
-              connectionStatus === "connected"
-                ? "bg-emerald-950/80 text-emerald-400 border-emerald-800/80 shadow-sm shadow-emerald-950"
-                : "bg-amber-950/80 text-amber-400 border-amber-800/80 animate-pulse"
-            }`}
-          >
-            <span
-              className={`w-2 h-2 rounded-full ${
-                connectionStatus === "connected" ? "bg-emerald-400" : "bg-amber-400"
+          {/* Status Indicators */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {candidateInfo?.skills && candidateInfo.skills.length > 0 && (
+              <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs">
+                <span className="text-[11px] text-slate-400 font-medium">Domain:</span>
+                <span className="text-[11px] text-blue-300 font-semibold">{candidateInfo.skills.slice(0, 3).join(", ")}</span>
+              </div>
+            )}
+
+            <div
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold border ${
+                connectionStatus === "connected"
+                  ? "bg-emerald-950/80 text-emerald-400 border-emerald-800/80 shadow-sm shadow-emerald-950"
+                  : "bg-amber-950/80 text-amber-400 border-amber-800/80 animate-pulse"
               }`}
-            />
-            <span>{connectionStatus === "connected" ? "HD Voice Connected" : "Connecting Call..."}</span>
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  connectionStatus === "connected" ? "bg-emerald-400" : "bg-amber-400"
+                }`}
+              />
+              <span>{connectionStatus === "connected" ? "HD Voice Connected" : "Connecting Call..."}</span>
+            </div>
           </div>
         </div>
+
+        {/* Autoplay blocked banner notification */}
+        {isAutoplayBlocked && (
+          <div className="w-full flex items-center justify-between gap-3 bg-gradient-to-r from-blue-950 via-indigo-950 to-blue-900 border border-blue-600/60 rounded-2xl px-4 py-2.5 shadow-xl animate-in fade-in">
+            <div className="flex items-center gap-2 text-xs text-blue-200">
+              <Volume2 className="w-4 h-4 text-cyan-400 animate-pulse" />
+              <span>Browser audio autoplay is waiting for interaction. Tap anywhere or click Enable Audio to hear the AI Interviewer.</span>
+            </div>
+            <button
+              onClick={() => {
+                unlockAudio();
+                handleReplayQuestion();
+              }}
+              className="px-3 py-1 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md transition-colors whitespace-nowrap"
+            >
+              Enable Audio 🔊
+            </button>
+          </div>
+        )}
       </header>
 
       {/* Main Calling Stage: 2-Tile Video/Voice Call Grid */}
