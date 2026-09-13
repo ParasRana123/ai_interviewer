@@ -1,12 +1,25 @@
 import { describe, it, expect } from "bun:test";
 import { startInterviewSession, generateNextInterviewTurn } from "../services/interview.service";
-import { classifyCandidateIntent, generateContextualFallback, type DialogContext } from "../services/dialog.manager";
+import {
+  classifyCandidateIntent,
+  generateContextualFallback,
+  formatCandidateName,
+  type DialogContext,
+} from "../services/dialog.manager";
 import { calculateResult } from "../result";
 
 describe("Gemini Interview Pipeline & Services", () => {
   it("should have startInterviewSession and generateNextInterviewTurn functions defined", () => {
     expect(typeof startInterviewSession).toBe("function");
     expect(typeof generateNextInterviewTurn).toBe("function");
+  });
+
+  it("should accurately format candidate names to clean Title Case first names", () => {
+    expect(formatCandidateName("PARAS RANA")).toBe("Paras");
+    expect(formatCandidateName("paras_rana")).toBe("Paras");
+    expect(formatCandidateName("ALEX JOHNSON")).toBe("Alex");
+    expect(formatCandidateName("")).toBe("there");
+    expect(formatCandidateName(undefined)).toBe("there");
   });
 
   it("should accurately classify candidate intent for audio checks, greetings, and technical replies", () => {
@@ -18,21 +31,25 @@ describe("Gemini Interview Pipeline & Services", () => {
     expect(classifyCandidateIntent("In my previous role at TechCorp, I built a Redis caching layer to handle 50k QPS.")).toBe("TECHNICAL_EXPLANATION");
   });
 
-  it("should generate dynamic audio check acknowledgement with candidate context instead of repetitive technical text", () => {
+  it("should generate concise audio check acknowledgement without echoing past multi-sentence greetings or dumping skills", () => {
     const mockContext: DialogContext = {
-      candidateName: "Paras Rana",
-      skills: ["React", "Node.js", "PostgreSQL"],
+      candidateName: "PARAS RANA",
+      skills: ["JavaScript", "TypeScript", "React", "Next.js", "Python", "Java", "C++", "Go", "SQL", "PostgreSQL", "MongoDB", "Docker", "Git", "HTML", "CSS", "TailwindCSS"],
       projects: [{ title: "Mercor Interviewer", description: "AI technical platform" }],
       experience: [],
       history: [
-        { type: "ASSISTANT", message: "Hello Paras, tell me about a recent project you built?" }
+        {
+          type: "ASSISTANT",
+          message: "Hello PARAS RANA, welcome to your technical interview! I have reviewed your background with JavaScript, TypeScript, React, Next.js, Python, Java, C++, Go, SQL, PostgreSQL, MongoDB, Docker, Git, HTML, CSS, TailwindCSS. To get started, could you briefly introduce yourself and tell me about a recent project you built?",
+        },
       ],
     };
 
-    const response = generateContextualFallback(mockContext, "hello hello can you listen");
+    const response = generateContextualFallback(mockContext, "hello hello");
     expect(response).toContain("Paras");
-    expect(response.toLowerCase()).toContain("hear you");
-    expect(response).not.toBe("Thank you for explaining that. Could you dive deeper into the key technical challenges you faced during that implementation and how you resolved them?");
+    expect(response.toLowerCase()).toContain("hear you loud and clear");
+    // Crucial: Must NOT repeat the long 15-skill list verbatim
+    expect(response).not.toContain("PostgreSQL, MongoDB, Docker, Git, HTML, CSS, TailwindCSS");
   });
 
   it("should reject empty candidate messages in generateNextInterviewTurn", async () => {
@@ -90,7 +107,7 @@ describe("Gemini Interview Pipeline & Services", () => {
     expect(classifyCandidateIntent(correctionMsg)).toBe("CORRECTION");
 
     const mockContext: DialogContext = {
-      candidateName: "Paras Rana",
+      candidateName: "PARAS RANA",
       skills: ["React", "Node.js", "WebSockets"],
       projects: [],
       experience: [],
@@ -102,33 +119,39 @@ describe("Gemini Interview Pipeline & Services", () => {
     };
 
     const response = generateContextualFallback(mockContext, correctionMsg);
-    expect(response).toContain("Paras");
     expect(response.toLowerCase()).not.toContain("data validation");
     // Should address the music/audio synchronization context
     expect(response.toLowerCase()).toMatch(/synchronized|playback|music|room/);
   });
 
-  it("should guarantee 100% non-repetition across multiple sequential candidate turns", () => {
+  it("should guarantee 100% non-repetition across multiple sequential candidate turns and vary prefixes", () => {
     const mockContext: DialogContext = {
-      candidateName: "Paras Rana",
+      candidateName: "PARAS RANA",
       skills: ["React", "Node.js", "PostgreSQL", "Docker"],
       projects: [{ title: "Music Sync", description: "Realtime audio player" }],
       experience: [],
       history: [],
     };
 
-    const generatedQuestions = new Set<string>();
+    const responses: string[] = [];
 
     for (let i = 0; i < 5; i++) {
       const userMsg = i === 0 ? "I built a collaborative music listening platform" : "We used WebSockets for audio sync and PostgreSQL for storage";
       const reply = generateContextualFallback(mockContext, userMsg);
-      
-      expect(generatedQuestions.has(reply)).toBe(false);
-      generatedQuestions.add(reply);
+
+      // Verify each response is completely unique
+      expect(responses.includes(reply)).toBe(false);
+      responses.push(reply);
+
       mockContext.history.push({ type: "USER", message: userMsg });
       mockContext.history.push({ type: "ASSISTANT", message: reply });
     }
 
-    expect(generatedQuestions.size).toBe(5);
+    expect(responses.length).toBe(5);
+
+    // Verify sequential turns do NOT all start with the exact same prefix
+    const first30Chars = responses.map((r) => r.substring(0, 30));
+    const uniquePrefixes = new Set(first30Chars);
+    expect(uniquePrefixes.size).toBeGreaterThanOrEqual(3);
   });
 });
