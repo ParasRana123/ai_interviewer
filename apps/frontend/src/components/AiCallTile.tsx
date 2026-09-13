@@ -1,5 +1,5 @@
 import React from "react";
-import { Bot, Volume2, VolumeX, Sparkles, Brain, Loader2 } from "lucide-react";
+import { Bot, Volume2, VolumeX, Sparkles, Brain, Loader2, RotateCcw } from "lucide-react";
 
 interface AiCallTileProps {
   isSpeaking: boolean;
@@ -56,18 +56,31 @@ export function AiCallTile({
           </div>
         </div>
 
-        {/* AI Audio Mute status button */}
-        <button
-          onClick={onToggleVoiceMute}
-          title={isVoiceMuted ? "Unmute AI Voice" : "Mute AI Voice"}
-          className={`p-2 rounded-xl border text-xs transition-all ${
-            isVoiceMuted
-              ? "bg-rose-950/80 text-rose-400 border-rose-800 hover:bg-rose-900"
-              : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700"
-          }`}
-        >
-          {isVoiceMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-        </button>
+        {/* Action buttons */}
+        <div className="flex items-center gap-2">
+          {onReplaySpeech && lastAiMessage && (
+            <button
+              onClick={onReplaySpeech}
+              title="Replay AI Speech"
+              className="p-2 rounded-xl border border-slate-700 bg-slate-800/80 text-slate-300 hover:text-cyan-300 hover:bg-slate-700 text-xs transition-all shadow-sm"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* AI Audio Mute status button */}
+          <button
+            onClick={onToggleVoiceMute}
+            title={isVoiceMuted ? "Unmute AI Voice" : "Mute AI Voice"}
+            className={`p-2 rounded-xl border text-xs transition-all shadow-sm ${
+              isVoiceMuted
+                ? "bg-rose-950/80 text-rose-400 border-rose-800 hover:bg-rose-900"
+                : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700"
+            }`}
+          >
+            {isVoiceMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </button>
+        </div>
       </div>
 
       {/* Center Avatar & Sound Wave Visualizer */}
@@ -109,7 +122,6 @@ export function AiCallTile({
         {/* Dynamic Voice Waves Bars */}
         <div className="flex items-center justify-center gap-1.5 mt-6 h-8">
           {Array.from({ length: 12 }).map((_, i) => {
-            const isMiddle = i >= 3 && i <= 8;
             return (
               <span
                 key={i}
@@ -142,6 +154,8 @@ export function AiCallTile({
               ? "bg-blue-950/90 text-cyan-300 border-blue-700/80 shadow-sm"
               : isThinking
               ? "bg-purple-950/90 text-purple-300 border-purple-800 shadow-sm"
+              : isVoiceMuted
+              ? "bg-rose-950/80 text-rose-300 border-rose-800"
               : "bg-slate-950/80 text-slate-400 border-slate-800"
           }`}
         >
@@ -154,6 +168,11 @@ export function AiCallTile({
             <>
               <Loader2 className="w-3 h-3 text-purple-400 animate-spin" />
               <span>Analyzing response...</span>
+            </>
+          ) : isVoiceMuted ? (
+            <>
+              <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+              <span>AI Voice Muted</span>
             </>
           ) : (
             <>
