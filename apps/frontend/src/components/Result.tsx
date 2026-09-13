@@ -127,10 +127,23 @@ export function Result() {
   }, [interviewId]);
 
   // Safe date comparison function
-  const sortedTranscript = [...(result.transcript || [])].sort((a, b) => {
+  const rawSorted = [...(result.transcript || [])].sort((a, b) => {
     const timeA = new Date(a.createdAt).getTime() || 0;
     const timeB = new Date(b.createdAt).getTime() || 0;
     return timeA - timeB;
+  });
+
+  // Clean and filter contiguous duplicates (same speaker with identical text within 10s)
+  const sortedTranscript = rawSorted.filter((item, index, arr) => {
+    if (index === 0) return true;
+    const prev = arr[index - 1];
+    const isSameType = (item.type || "").toUpperCase() === (prev.type || "").toUpperCase();
+    const isSameText = (item.content || "").trim().toLowerCase() === (prev.content || "").trim().toLowerCase();
+    const timeDiff = Math.abs((new Date(item.createdAt).getTime() || 0) - (new Date(prev.createdAt).getTime() || 0));
+    if (isSameType && isSameText && timeDiff < 10000) {
+      return false;
+    }
+    return true;
   });
 
   const candidateTurns = sortedTranscript.filter(t => t.type.toUpperCase() === "USER").length;
