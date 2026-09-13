@@ -3,13 +3,14 @@ import { prisma } from "../prisma/db";
 import {
   classifyCandidateIntent,
   generateContextualFallback,
+  formatCandidateName,
   type DialogContext,
 } from "./dialog.manager";
 
 const GEMINI_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
   "gemini-1.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-pro",
 ];
 
 function getGenerativeModel(modelName: string) {
@@ -69,6 +70,10 @@ export async function startInterviewSession(interviewId: string) {
     throw new Error("Interview session not found");
   }
 
+  const candidateFirstName = formatCandidateName(interview.name);
+  const skillsArray = Array.isArray(interview.skills) ? (interview.skills as string[]) : [];
+  const topSkills = skillsArray.slice(0, 3).join(", ") || "Software Development";
+
   // If session already has an opening assistant message, return it
   if (interview.conversations.length > 0) {
     const firstAssistantMsg = interview.conversations.find((c) => c.type === "ASSISTANT");
@@ -76,35 +81,34 @@ export async function startInterviewSession(interviewId: string) {
       return {
         success: true,
         message: firstAssistantMsg.message,
-        candidateName: interview.name || "Candidate",
-        skills: (interview.skills as string[]) || [],
+        candidateName: candidateFirstName,
+        skills: skillsArray,
         alreadyStarted: true,
       };
     }
   }
 
-  const candidateName = interview.name || "Candidate";
-  const skillsList = Array.isArray(interview.skills) ? (interview.skills as string[]).join(", ") : "Software Engineering";
   const projectsSummary = Array.isArray(interview.projects)
     ? JSON.stringify(interview.projects, null, 2)
     : "General software development projects";
 
   const prompt = `
 You are an expert Senior Technical Interviewer conducting a live interactive technical interview.
-Candidate Name: ${candidateName}
-Candidate Skills: ${skillsList}
+Candidate First Name: ${candidateFirstName}
+Candidate Key Skills: ${topSkills}
 Candidate Projects: ${projectsSummary}
 
 TASK:
-1. Warmly greet the candidate by their name (${candidateName}).
+1. Warmly greet the candidate by their first name (${candidateFirstName}).
 2. Briefly introduce yourself as their AI Technical Interviewer for this session.
-3. Ask your first engaging question based directly on their background, key skills, or one of their notable projects.
-4. Keep the entire response conversational, professional, concise (3-4 sentences max), and end with 1 clear question for them to answer out loud.
+3. Ask your first engaging question based directly on their background, key skills (${topSkills}), or one of their notable projects.
+4. Keep the entire response conversational, professional, concise (2-3 sentences max), and end with 1 clear question for them to answer out loud.
+5. Do NOT list out long skill lists or repetitive boilerplate.
 
 Respond in clean plain text with no markdown formatting.
 `;
 
-  let openingGreeting = `Hello ${candidateName}, welcome to your technical interview! I have reviewed your background with ${skillsList}. To get started, could you briefly introduce yourself and tell me about a recent project you built?`;
+  let openingGreeting = `Hello ${candidateFirstName}, welcome to your technical interview! I have reviewed your background with ${topSkills}. To get started, could you briefly introduce yourself and tell me about a recent project you built?`;
 
   const generatedText = await generateWithRetry(prompt, 1);
   if (generatedText) {
@@ -128,8 +132,8 @@ Respond in clean plain text with no markdown formatting.
     success: true,
     message: savedMessage.message,
     id: savedMessage.id,
-    candidateName,
-    skills: (interview.skills as string[]) || [],
+    candidateName: candidateFirstName,
+    skills: skillsArray,
     alreadyStarted: false,
   };
 }
@@ -161,7 +165,6 @@ export async function generateNextInterviewTurn(interviewId: string, userMessage
   // 2. Server-side Deduplication Guard:
   // Check if the latest message recorded was identical user speech submitted within the last 6 seconds
   const lastMsg = interview.conversations[interview.conversations.length - 1];
-  const secondLastMsg = interview.conversations[interview.conversations.length - 2];
 
   if (
     lastMsg &&
@@ -187,7 +190,7 @@ export async function generateNextInterviewTurn(interviewId: string, userMessage
     },
   });
 
-  const candidateName = interview.name || "Candidate";
+  const candidateFirstName = formatCandidateName(interview.name);
   const skillsList = Array.isArray(interview.skills) ? (interview.skills as string[]) : [];
   const projectsList = Array.isArray(interview.projects) ? (interview.projects as any[]) : [];
   const experienceList = Array.isArray(interview.experience) ? (interview.experience as any[]) : [];
@@ -201,7 +204,7 @@ export async function generateNextInterviewTurn(interviewId: string, userMessage
   ];
 
   const dialogContext: DialogContext = {
-    candidateName,
+    candidateName: candidateFirstName,
     skills: skillsList,
     projects: projectsList,
     experience: experienceList,
@@ -237,24 +240,22 @@ export async function generateNextInterviewTurn(interviewId: string, userMessage
   const prompt = `
 You are an expert Senior Technical Interviewer conducting a live, interactive technical interview.
 
-Candidate Name: ${candidateName}
-Candidate Skills: ${skillsList.join(", ") || "Software Development"}
-Candidate Projects: ${JSON.stringify(projectsList, null, 2)}
+Candidate First Name: ${candidateFirstName}
+Candidate Skills: ${skillsList.slice(0, 4).join(", ") || "Software Development"}
 Candidate Latest Input Intent: ${intent}
 
 CONVERSATION TRANSCRIPT SO FAR:
 ${dialogHistory}
 
 CRITICAL INTERVIEWER INSTRUCTIONS:
-1. Act naturally like a friendly, rigorous senior technical lead evaluating a peer.
-2. Directly acknowledge what the candidate just said in their last message ("${cleanUserMessage}").
-3. DO NOT use canned or repetitive phrases (like "Thank you for explaining that").
-4. Never repeat a question or topic that has already been asked earlier in the transcript.
-5. If the candidate answered a technical question, probe deeper into their specific implementation, edge cases, trade-offs, concurrency, or database choices.
-6. If the candidate gave a short or conversational answer, guide them smoothly toward explaining a specific project or technical system.
-7. Keep your response CONCISE (2 to 4 sentences maximum) so that it is engaging and natural when spoken aloud via text-to-speech.
-8. End with ONE clear, focused question.
-9. Output ONLY your direct spoken words in clean plain text with no markdown formatting.
+1. Act naturally like a friendly, rigorous senior technical lead conducting a live technical assessment.
+2. Directly reference a specific technical detail or decision from what the candidate just explained ("${cleanUserMessage}").
+3. NEVER repeat repetitive acknowledgement boilerplate (e.g. DO NOT start consecutive responses with "Got it", "Thanks for breaking that down", or "I see").
+4. DO NOT repeat the candidate's name on every single response.
+5. NEVER repeat a question, topic, or phrasing that has already been asked earlier in the conversation transcript.
+6. Keep your response CONCISE (2 to 3 sentences max) so it sounds natural when spoken aloud via text-to-speech.
+7. End with ONE clear, focused follow-up technical question.
+8. Output ONLY your spoken words in clean plain text with no markdown formatting.
 `;
 
   let nextResponse: string | null = await generateWithRetry(prompt, 2);
