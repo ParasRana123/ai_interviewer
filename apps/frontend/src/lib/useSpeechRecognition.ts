@@ -42,6 +42,10 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
   const accumulatedTextRef = useRef<string>("");
   const interimTextRef = useRef<string>("");
 
+  // Deduplication tracking to prevent repeating identical transcripts
+  const lastCommittedTextRef = useRef<string>("");
+  const lastCommittedTimeRef = useRef<number>(0);
+
   const onFinalTranscriptRef = useRef(onFinalTranscript);
   onFinalTranscriptRef.current = onFinalTranscript;
 
@@ -68,13 +72,38 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       fullText = finalBuffer ? `${finalBuffer} ${interimBuffer}` : interimBuffer;
     }
 
+    fullText = fullText.trim();
+
     if (fullText) {
+      const now = Date.now();
+      const isDuplicate =
+        fullText.toLowerCase() === lastCommittedTextRef.current.toLowerCase() &&
+        now - lastCommittedTimeRef.current < 3000;
+
+      // Clear memory buffers immediately
       accumulatedTextRef.current = "";
       interimTextRef.current = "";
       setAccumulatedFinal("");
       setInterimTranscript("");
       onSpeechChangeRef.current?.("");
-      onFinalTranscriptRef.current?.(fullText);
+
+      // Abort the active recognition instance to purge the internal browser event.results buffer
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch (e) {
+          // ignore
+        }
+        recognitionRef.current = null;
+      }
+
+      if (!isDuplicate) {
+        lastCommittedTextRef.current = fullText;
+        lastCommittedTimeRef.current = now;
+        onFinalTranscriptRef.current?.(fullText);
+      } else {
+        console.warn("Deduplicated repeated STT transcript submission:", fullText);
+      }
     }
   }, [clearSilenceTimer]);
 
@@ -284,4 +313,3 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     resetTranscript,
   };
 }
-
