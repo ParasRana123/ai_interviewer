@@ -51,6 +51,10 @@ export function Interview() {
 
   const hasInitializedRef = useRef(false);
 
+  // Synchronous submission lock and candidate transcript deduplication ref
+  const isSubmittingRef = useRef(false);
+  const lastSubmittedAnswerRef = useRef<{ text: string; time: number }>({ text: "", time: 0 });
+
   // Speech Synthesis Hook for AI Voice responses
   const {
     isSupported: isTtsSupported,
@@ -68,7 +72,24 @@ export function Interview() {
   const sendCandidateAnswer = useCallback(
     async (text: string) => {
       const cleanText = text.trim();
-      if (!cleanText || !interviewId || isAiThinking) return;
+      if (!cleanText || !interviewId) return;
+
+      const now = Date.now();
+      // Deduplicate rapid repeat submissions (< 3500ms) or simultaneous concurrent calls
+      if (
+        isSubmittingRef.current ||
+        (cleanText.toLowerCase() === lastSubmittedAnswerRef.current.text.toLowerCase() &&
+          now - lastSubmittedAnswerRef.current.time < 3500)
+      ) {
+        console.warn("Deduplicating duplicate candidate answer submission:", cleanText);
+        return;
+      }
+
+      isSubmittingRef.current = true;
+      lastSubmittedAnswerRef.current = { text: cleanText, time: now };
+
+      // Immediately pause speech recognition so it doesn't process audio echo while waiting for response
+      stopListeningRef.current?.();
 
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}-${Math.random().toString(36).substring(7)}`,
@@ -131,9 +152,10 @@ export function Interview() {
         }
       } finally {
         setIsAiThinking(false);
+        isSubmittingRef.current = false;
       }
     },
-    [interviewId, isAiThinking, speak]
+    [interviewId, speak]
   );
 
   // Web Speech API Hook for microphone speech transcription

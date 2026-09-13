@@ -6,50 +6,46 @@ import {
   type DialogContext,
 } from "./dialog.manager";
 
-function getGenerativeModel(modelName = "gemini-2.5-flash") {
+const GEMINI_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+];
+
+function getGenerativeModel(modelName: string) {
   const apiKey = process.env.GEMINI_API_KEY || "";
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not configured");
+    throw new Error("GEMINI_API_KEY environment variable is not configured");
   }
   const genai = new GoogleGenerativeAI(apiKey);
   return genai.getGenerativeModel({
     model: modelName,
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 250,
+    },
   });
 }
 
 /**
- * Executes a Gemini model call with exponential backoff retry for transient rate limits
+ * Attempts text generation using fallback models if primary model is rate-limited.
  */
-async function generateWithRetry(prompt: string, maxRetries = 1): Promise<string | null> {
-  let attempt = 0;
-  while (attempt <= maxRetries) {
+async function generateWithRetry(prompt: string, retries = 2): Promise<string | null> {
+  for (const modelName of GEMINI_MODELS) {
     try {
-      const model = getGenerativeModel();
-      const result = await model.generateContent(prompt);
-      const text = result.response.text()?.trim();
-      if (text) {
-        return text.replace(/[*#_`]/g, "").trim();
+      const model = getGenerativeModel(modelName);
+      const response = await model.generateContent(prompt);
+      const text = response.response.text();
+      if (text && text.trim()) {
+        return text
+          .replace(/[*#_`~>]/g, "")
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+          .replace(/https?:\/\/\S+/g, "")
+          .trim();
       }
-      return null;
     } catch (err: any) {
-      attempt++;
-      const isDailyQuota = err?.message?.includes("Quota exceeded") || err?.message?.includes("free_tier_requests");
-      const isRateLimit = err?.message?.includes("429") || err?.status === 429;
-
-      if (isDailyQuota) {
-        // Daily limit reached (e.g. 20 req/day on free tier) - immediately use adaptive NLU engine
-        console.log("ℹ️ [Gemini API Note]: Daily Free Tier quota limit reached. Using Dynamic Adaptive NLU Engine.");
-        return null;
-      }
-
-      if (isRateLimit && attempt <= maxRetries) {
-        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 400;
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        continue;
-      }
-
-      console.warn("ℹ️ [Gemini Generation Notice]:", err?.message?.substring(0, 90) || err);
-      break;
+      console.warn(`[Gemini Model ${modelName} notice]:`, err?.message || err);
+      // Try next fallback model
     }
   }
   return null;
@@ -148,16 +144,7 @@ export async function generateNextInterviewTurn(interviewId: string, userMessage
     throw new Error("Candidate message cannot be empty");
   }
 
-  // 1. Record the candidate's turn in database
-  await prisma.message.create({
-    data: {
-      interviewId,
-      type: "USER",
-      message: cleanUserMessage,
-    },
-  });
-
-  // 2. Fetch full candidate profile and history
+  // 1. Fetch current interview profile and conversation history first
   const interview = await prisma.interview.findUnique({
     where: { id: interviewId },
     include: {
@@ -171,20 +158,54 @@ export async function generateNextInterviewTurn(interviewId: string, userMessage
     throw new Error("Interview not found");
   }
 
+  // 2. Server-side Deduplication Guard:
+  // Check if the latest message recorded was identical user speech submitted within the last 6 seconds
+  const lastMsg = interview.conversations[interview.conversations.length - 1];
+  const secondLastMsg = interview.conversations[interview.conversations.length - 2];
+
+  if (
+    lastMsg &&
+    lastMsg.type === "USER" &&
+    lastMsg.message.trim().toLowerCase() === cleanUserMessage.toLowerCase() &&
+    Date.now() - new Date(lastMsg.createdAt).getTime() < 6000
+  ) {
+    console.warn(`[Backend Deduplication] Detected duplicate candidate turn for interview ${interviewId}. Reusing last state.`);
+    return {
+      success: true,
+      reply: "I heard you clearly. Let's proceed.",
+      id: lastMsg.id,
+      deduplicated: true,
+    };
+  }
+
+  // 3. Record the candidate's turn in database
+  const savedUserMessage = await prisma.message.create({
+    data: {
+      interviewId,
+      type: "USER",
+      message: cleanUserMessage,
+    },
+  });
+
   const candidateName = interview.name || "Candidate";
   const skillsList = Array.isArray(interview.skills) ? (interview.skills as string[]) : [];
   const projectsList = Array.isArray(interview.projects) ? (interview.projects as any[]) : [];
   const experienceList = Array.isArray(interview.experience) ? (interview.experience as any[]) : [];
+
+  const updatedHistory = [
+    ...interview.conversations.map((c) => ({
+      type: c.type as "ASSISTANT" | "USER",
+      message: c.message,
+    })),
+    { type: "USER" as const, message: cleanUserMessage },
+  ];
 
   const dialogContext: DialogContext = {
     candidateName,
     skills: skillsList,
     projects: projectsList,
     experience: experienceList,
-    history: interview.conversations.map((c) => ({
-      type: c.type as "ASSISTANT" | "USER",
-      message: c.message,
-    })),
+    history: updatedHistory,
   };
 
   const intent = classifyCandidateIntent(cleanUserMessage);
@@ -209,7 +230,7 @@ export async function generateNextInterviewTurn(interviewId: string, userMessage
   }
 
   // Build dialog history representation
-  const dialogHistory = interview.conversations
+  const dialogHistory = updatedHistory
     .map((c) => `${c.type === "USER" ? "Candidate" : "Interviewer"}: ${c.message}`)
     .join("\n");
 
@@ -258,4 +279,3 @@ CRITICAL INTERVIEWER INSTRUCTIONS:
     intent,
   };
 }
-
